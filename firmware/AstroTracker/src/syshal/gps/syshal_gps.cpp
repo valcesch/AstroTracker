@@ -26,8 +26,8 @@
 #include "../syshal_gpio.h"
 #include "../syshal_gps.h"
 #include "../syshal_time.h"
-#include "../../core/debug/debug.h"
 #include "../syshal_config.h"
+#include "../../core/debug/debug.h"
 #include "SparkFun_u-blox_GNSS_Arduino_Library.h"
 
 SFE_UBLOX_GNSS myGNSS;
@@ -110,13 +110,11 @@ int syhsal_gps_update_config(syshal_gps_config_t gps_config)
         myGNSS.enableGNSS(config.gps->contents.with_glonass, SFE_UBLOX_GNSS_ID_GLONASS);
 
         // Enable / disable raw messages
+        DEBUG_PR_TRACE("Activate/Deactivate UBX - UBX_CLASS_RXM - UBX_RXM_MEAS20. %s()", __FUNCTION__);
         if (config.gps->contents.with_rxm_meas20)
-        {
-            DEBUG_PR_TRACE("Activate: UBX - UBX_CLASS_RXM - UBX_RXM_MEAS20. %s()", __FUNCTION__);
             myGNSS.enableMessage(UBX_CLASS_RXM, UBX_RXM_MEAS20, COM_PORT_I2C);
-        }
-
-        // myGNSS.setNavigationFrequency(10); // Set output to 1 times a second
+        else
+            myGNSS.disableMessage(UBX_CLASS_RXM, UBX_RXM_MEAS20, COM_PORT_I2C);
     }
 
     return SYSHAL_GPS_NO_ERROR;
@@ -204,7 +202,7 @@ int syshal_gps_tick(void)
     if (myGNSS.getRXMMEAS20(meas20))
     {
         myGNSS.flushRXMMEAS20();
-        
+
         event.id = SYSHAL_GPS_EVENT_RAW;
 
         memcpy(event.raw.meas20, meas20, 20);

@@ -88,7 +88,7 @@ static const char *sm_main_state_str[] =
 #define SOFT_WATCHDOG_TIMEOUT_S (16)   // How many seconds to allow before soft watchdog trips -> DO NOT SET LOWER THAN 16S
 #define HARD_WATCHDOG_TIMEOUT_S (3600) // How many seconds to allow before soft watchdog trips -> WILL DEPEND ON HARDWARE CONFIGURATION
 
-#define GPS_ACTIVE_WAKEUP_TIMEOUT_S (5)
+#define GPS_ACTIVE_WAKEUP_TIMEOUT_S (3)
 
 #define RTC_DEFAULT_TIMESTAMP_S (1514764740 + 50) // Sun Dec 31 2017 23:59:00 GMT+0000
 
@@ -132,7 +132,6 @@ typedef struct __attribute__((__packed__))
 
 typedef struct __attribute__((__packed__))
 {
-    uint32_t timestamp;
     uint8_t meas20[20];
 } LOG_RAW_struct;
 
@@ -261,13 +260,13 @@ void syshal_gps_callback(syshal_gps_event_t *event)
     {
         DEBUG_PR_TRACE("SYSHAL_GPS_EVENT_RAW");
 
-        if (sys_config.gps_settings.hdr.set &&
-            (syshal_rtc_return_uptime() - gps_start_time) < sys_config.gps_settings.contents.raw_timeout_s)
+        if ((sys_config.gps_settings.hdr.set) &&
+            (sys_config.gps_settings.contents.with_rxm_meas20) &&
+            ((syshal_rtc_return_uptime() - gps_start_time) <= sys_config.gps_settings.contents.raw_timeout_s))
         {
             // Store data
             uint16_t slot_id = 0;
             LOG_RAW_struct log_raw;
-            log_raw.timestamp = event->raw.timestamp;
             memcpy(log_raw.meas20, event->raw.meas20, 20);
 
             logger_insert_data(&log_raw, sizeof(LOG_RAW_struct), LOGGER_TAG_RAW_SLOT,
@@ -666,8 +665,8 @@ static void sm_main_boot(sm_handle_t *state_handle)
         sys_config.gps_settings.contents.with_galileo = true;
         sys_config.gps_settings.contents.with_beidou = true;
         sys_config.gps_settings.contents.with_glonass = true;
-        sys_config.gps_settings.contents.with_rxm_meas20 = false;
-        sys_config.gps_settings.contents.raw_timeout_s = 12;
+        sys_config.gps_settings.contents.with_rxm_meas20 = true;
+        sys_config.gps_settings.contents.raw_timeout_s = 10;
         sys_config.gps_settings.hdr.set = true;
 
         sys_config.sat_settings.contents.with_pld_ack = true;
@@ -843,43 +842,6 @@ static void sm_main_operational(sm_handle_t *state_handle)
             }
         }
 
-        if ((sys_config.gps_log_position_enable.hdr.set &&
-             sys_config.gps_log_position_enable.contents.enable))
-        {
-            if (!syshal_led_is_active())
-            {
-                syshal_led_set_solid(SYSHAL_LED_COLOUR_GREEN);
-                syshal_led_tick();
-            }
-
-            syshal_gps_tick();
-
-            if ((syshal_gps_get_state() == SYSHAL_GPS_STATE_FIXED) ||
-                (syshal_gps_get_state() == SYSHAL_GPS_STATE_FIXED_RAW) ||
-                ((syshal_rtc_return_uptime() - gps_start_time) > (sys_config.scheduler_settings.contents.gps_timeout_s)))
-            {
-                syshal_gps_shutdown();
-            }
-        }
-
-        if (logger_new_data_available)
-        {
-            logger_new_data_available = false;
-            logger_push_slots_to_sat();
-        }
-
-        // Turn off led after led_finish_time
-        if (syshal_led_is_active())
-        {
-            uint32_t current_time = syshal_time_get_ticks_ms();
-
-            // If there a no finish time or the current time is less than the finish time
-            if (led_finish_time != 0 && current_time > led_finish_time)
-            {
-                syshal_led_off();
-            }
-        }
-
         // Get the battery level state
         uint8_t level;
         if (!syshal_batt_level(&level))
@@ -896,9 +858,54 @@ static void sm_main_operational(sm_handle_t *state_handle)
             }
         }
 
+        if ((sys_config.gps_log_position_enable.hdr.set &&
+             sys_config.gps_log_position_enable.contents.enable))
+        {
+            if (!syshal_led_is_active())
+            {
+                syshal_led_set_solid(SYSHAL_LED_COLOUR_GREEN);
+                syshal_led_tick();
+            }
+
+            syshal_gps_tick();
+
+            // If we have a raw sample aquired
+            if ((sys_config.gps_settings.hdr.set) &&
+                (sys_config.gps_settings.contents.with_rxm_meas20) &&
+                ((syshal_rtc_return_uptime() - gps_start_time) <= sys_config.gps_settings.contents.raw_timeout_s) &&
+                (syshal_gps_get_state() == SYSHAL_GPS_STATE_FIXED_RAW))
+                syshal_gps_shutdown();
+
+            // If we have a 3D fix
+            if (syshal_gps_get_state() == SYSHAL_GPS_STATE_FIXED)
+                syshal_gps_shutdown();
+
+            // If we have a timeout
+            if ((syshal_rtc_return_uptime() - gps_start_time) > sys_config.scheduler_settings.contents.gps_timeout_s)
+                syshal_gps_shutdown();
+        }
+
+        // Turn off led after led_finish_time
+        if (syshal_led_is_active())
+        {
+            uint32_t current_time = syshal_time_get_ticks_ms();
+
+            // If there a no finish time or the current time is less than the finish time
+            if (led_finish_time != 0 && current_time > led_finish_time)
+            {
+                syshal_led_off();
+            }
+        }
+
         syshal_sat_tick();
         scheduler_tick();
         syshal_led_tick();
+
+        if (logger_new_data_available)
+        {
+            logger_push_slots_to_sat();
+            logger_new_data_available = false;
+        }
 
         // Go to sleep
         if (!syshal_led_is_active())
@@ -909,7 +916,7 @@ static void sm_main_operational(sm_handle_t *state_handle)
                 scheduler_get_timestamp_next_alarm(&timestamp_next_alarm);
 
                 // We have to kick the hardware watchdog
-                if (timestamp_next_alarm - syshal_rtc_return_timestamp() > HARD_WATCHDOG_TIMEOUT_S)
+                if ((timestamp_next_alarm - syshal_rtc_return_timestamp()) > HARD_WATCHDOG_TIMEOUT_S)
                     syshal_rtc_set_alarm(syshal_rtc_return_timestamp() + HARD_WATCHDOG_TIMEOUT_S, NULL);
                 else
                     syshal_rtc_set_alarm(timestamp_next_alarm, NULL);
@@ -1183,10 +1190,10 @@ void logger_push_slots_to_sat(void)
                 }
             }
         }
-    }
 
-    // Update satellite context
-    syshal_sat_read_status(&(sm_context.sat_counters.status));
+        // Update satellite context
+        syshal_sat_read_status(&(sm_context.sat_counters.status));
+    }
 
     syshal_sat_shutdown();
 }

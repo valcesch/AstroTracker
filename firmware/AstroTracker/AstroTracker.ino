@@ -25,6 +25,7 @@
 
 #include "src/core/sm/sm.h"
 #include "src/core/sm/sm_main.h"
+#include "src/core/cexception/exceptions.h"
 #include "src/core/cexception/cexception.h"
 #include "src/syshal/syshal_pmu.h"
 

@@ -28,8 +28,8 @@
 #include "../syshal_gpio.h"
 #include "../syshal_time.h"
 #include "../syshal_sat.h"
-#include "../../core/debug/debug.h"
 #include "../syshal_config.h"
+#include "../../core/debug/debug.h"
 #include <Wire.h>
 
 #ifdef GPIO_HWDT_RESET
@@ -97,10 +97,10 @@ void syshal_pmu_sleep(syshal_pmu_sleep_mode_t mode)
         }
 
         // Go to sleep
+#if defined(NRF52_SERIES)
         Wire.end();
         UART_ANS.end();
 
-#if defined(NRF52_SERIES)
         nrf_gpio_cfg_default(PIN_WIRE_SDA);
         nrf_gpio_cfg_default(PIN_WIRE_SCL);
         nrf_gpio_cfg(PIN_SERIAL1_RX, Correct ? should be TX ?
@@ -112,6 +112,9 @@ void syshal_pmu_sleep(syshal_pmu_sleep_mode_t mode)
 
         suspendLoop();
 
+        UART_ANS.begin(SYSHAL_SAT_BAUDRATE);
+        Wire.begin();
+
 #elif defined(ARDUINO_ARCH_SAMD)
 
         // Disable USB peripheral
@@ -122,7 +125,6 @@ void syshal_pmu_sleep(syshal_pmu_sleep_mode_t mode)
         PORT->Group[g_APinDescription[PIN_SPI_MISO].ulPort].PINCFG[g_APinDescription[PIN_SPI_MISO].ulPin].reg = 0;
         PORT->Group[g_APinDescription[PIN_SPI_MOSI].ulPort].PINCFG[g_APinDescription[PIN_SPI_MOSI].ulPin].reg = 0;
         PORT->Group[g_APinDescription[GPIO_VBAT].ulPort].PINCFG[g_APinDescription[GPIO_VBAT].ulPin].reg = 0;
-        pinMode(GPIO_ANS_UART_TX, INPUT_PULLDOWN);
 
         // Don't fully power down flash when in sleep
         // NVMCTRL->CTRLB.bit.SLEEPPRM = NVMCTRL_CTRLB_SLEEPPRM_DISABLED_Val;
@@ -141,10 +143,8 @@ void syshal_pmu_sleep(syshal_pmu_sleep_mode_t mode)
         SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
 
         // Enable back USB peripheral
-        UART_ANS.begin(SYSHAL_SAT_BAUDRATE);
-#endif
         USBDevice.attach();
-        Wire.begin();
+#endif
 
         // Enable back software watchdog
         // syshal_rtc_soft_watchdog_enable();
