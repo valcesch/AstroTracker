@@ -50,9 +50,6 @@ static volatile bool new_event_pending = false;
 #define SYSHAL_SAT_RESTART_TIME_MS 100 //[ms] - 100ms = wakeup time from sleep mode
 #define SYSHAL_SAT_RST_HTIME 1         //[ms]
 
-#define SYSHAL_SAT_SEARCH_WINDOW_SIZE 86400            //[s]
-#define SYSHAL_SAT_MAX_TLE_VALIDITY_PERIOD 365 * 86400 //[s]
-
 // Private functions
 void syshal_sat_reset_priv(void);
 int syshal_sat_clear_all_messages_priv(void);
@@ -65,9 +62,13 @@ int syshal_sat_read_command_40_bytes_priv(uint8_t buffer[40],
                                           uint32_t *createdDate);
 int syshal_sat_read_message_ack_priv(uint16_t *buffer_id);
 
-static void syshal_sat_int1_pin_interrupt_priv(void)
+static void syshal_sat_int_pin_event_priv(void)
 {
     new_event_pending = true;
+
+#if defined(NRF52_SERIES)
+    resumeLoop();
+#endif
 }
 
 int syshal_sat_init(void)
@@ -86,7 +87,7 @@ int syshal_sat_init(void)
 #ifdef SYSHAL_SAT_GPIO_ANT_IN_USE
     syshal_gpio_init(SYSHAL_SAT_GPIO_ANT_IN_USE, INPUT_PULLDOWN);
 #endif
-    syshal_gpio_enable_interrupt(SYSHAL_SAT_GPIO_INT, syshal_sat_int1_pin_interrupt_priv, CHANGE);
+    syshal_gpio_enable_interrupt(SYSHAL_SAT_GPIO_INT, syshal_sat_int_pin_event_priv, CHANGE);
 
     // Reset module
     syshal_sat_reset_priv();
@@ -98,7 +99,7 @@ int syshal_sat_init(void)
     {
         DEBUG_PR_ERROR("Not detected at default UART port. Please check wiring. %s()", __FUNCTION__);
         syshal_sat_shutdown();
-        return SYSHAL_SAT_ERROR_TIMEOUT;
+        return SYSHAL_SAT_ERROR_DEVICE;
     }
 
     // Clear all queued messages (if no reset line connected)
@@ -366,64 +367,16 @@ int syshal_sat_read_event_priv(syshal_sat_event_id_t *event)
     return SYSHAL_SAT_NO_ERROR;
 }
 
-int syshal_sat_get_next_contact_oportuinty(uint32_t *delay,
-                                           syshal_sat_pwr_mode_t mode,
-                                           uint32_t t_now,
-                                           int32_t latitude,
-                                           int32_t longitude)
+int syshal_sat_get_next_contact_oportuinty(uint32_t *delay)
 {
-    switch (mode)
+    if (state == SYSHAL_SAT_STATE_ASLEEP)
+        return SYSHAL_SAT_ERROR_INVALID_STATE;
+
+    DEBUG_PR_TRACE("Contact time prediction with Astronode S. %s", __FUNCTION__);
+
+    if (astronode.read_next_contact_opportunity(delay) != ANS_STATUS_SUCCESS)
     {
-    case SYSHAL_SAT_PWR_MODE_SAT_PASS_PREDICT:
-    {
-        DEBUG_PR_TRACE("Contact time prediction with SAT_PASS module. %s", __FUNCTION__);
-        /*
-        if (satpass.read_next_contact_opportunity(t_now, delay) != SAT_NO_ERROR)
-        {
-            // If no satellite pass found, compute them after updating terminal location
-            satpass.set_geo(latitude, longitude);
-
-            satpass.clear_all_sat_pass_slots();
-            satpass.clear_all_sat_slots();
-
-            DEBUG_PR_TRACE("NOT IMPLEMENTED - DID NOT ADD SATELLITES TO LIST. %s", __FUNCTION__);
-
-            for (uint8_t i = 0; i < SYSHAL_SAT_MAX_NB_SAT; i++)
-            {
-                satpass.add_sat_from_tle(tleName[i], tlel1[i], tlel2[i], 1, t_now + SYSHAL_SAT_MAX_TLE_VALIDITY_PERIOD);
-            }
-
-            satpass.compute_next_sat_pass(t_now, t_now + SYSHAL_SAT_SEARCH_WINDOW_SIZE);
-
-            // Check again if new satellite passes available
-            if (satpass.read_next_contact_opportunity(t_now, delay) != SAT_NO_ERROR)
-            {
-                return SYSHAL_SAT_ERROR_READ_NEXT_CONT_OPORT;
-            }
-        }*/
-        break;
-    }
-    case SYSHAL_SAT_PWR_MODE_ASTROCAST_EPHEMERIDES:
-    {
-        if (state == SYSHAL_SAT_STATE_ASLEEP)
-            return SYSHAL_SAT_ERROR_INVALID_STATE;
-
-        DEBUG_PR_TRACE("Contact time prediction with Astronode S. %s", __FUNCTION__);
-
-        if (astronode.read_next_contact_opportunity(delay) != ANS_STATUS_SUCCESS)
-        {
-            return SYSHAL_SAT_ERROR_READ_NEXT_CONT_OPORT;
-        }
-
-        break;
-    }
-    case SYSHAL_SAT_PWR_MODE_NONE:
-    {
-        DEBUG_PR_TRACE("No contact time prediction available. %s", __FUNCTION__);
-
-        *delay = 0;
-        break;
-    }
+        return SYSHAL_SAT_ERROR_READ_NEXT_CONT_OPORT;
     }
 
     return SYSHAL_SAT_NO_ERROR;
@@ -447,10 +400,6 @@ int syshal_sat_read_status(syshal_sat_status_t *status)
         status->ack_fragment_cnt = per_struct.ack_fragment_cnt;
         status->queued_msg_cnt = per_struct.queued_msg_cnt;
     }
-    else
-    {
-        return SYSHAL_SAT_ERROR_READ_HK;
-    }
 
     // Module state
     ASTRONODE_MST_STRUCT mst_struct;
@@ -458,20 +407,12 @@ int syshal_sat_read_status(syshal_sat_status_t *status)
     {
         status->uptime = mst_struct.uptime;
     }
-    else
-    {
-        return SYSHAL_SAT_ERROR_READ_HK;
-    }
 
     // Environment details
     ASTRONODE_END_STRUCT end_struct;
     if (astronode.read_environment_details(&end_struct) == ANS_STATUS_SUCCESS)
     {
         // Empty
-    }
-    else
-    {
-        return SYSHAL_SAT_ERROR_READ_HK;
     }
 
     // Last contact details
@@ -482,10 +423,6 @@ int syshal_sat_read_status(syshal_sat_status_t *status)
         status->time_end_last_contact = lcd_struct.time_end_last_contact;
         status->peak_rssi_last_contact = lcd_struct.peak_rssi_last_contact;
         status->time_peak_rssi_last_contact = lcd_struct.time_peak_rssi_last_contact;
-    }
-    else
-    {
-        return SYSHAL_SAT_ERROR_READ_HK;
     }
 
     return SYSHAL_SAT_NO_ERROR;
@@ -545,19 +482,26 @@ int syshal_sat_tick(void)
             {
             case SYSHAL_SAT_EVENT_MSG_ACK:
             {
-                syshal_sat_read_message_ack_priv(&event.msg_acknowledged.msg_id);
+                uint16_t msg_id;
+                syshal_sat_read_message_ack_priv(&msg_id);
                 event.id = SYSHAL_SAT_EVENT_MSG_ACK;
-                syshal_rtc_get_timestamp(&event.msg_acknowledged.timestamp);
+                uint32_t timestamp;
+                syshal_rtc_get_timestamp(&timestamp);
                 DEBUG_PR_TRACE("Got MSG ACKNOWLEDGED. %s()", __FUNCTION__);
+                event.msg_acknowledged.msg_id = msg_id;
+                event.msg_acknowledged.timestamp = timestamp;
                 syshal_sat_callback(&event);
                 break;
             }
             case SYSHAL_SAT_EVENT_COMMAND_RECEIVED:
             {
-                syshal_sat_read_command_40_bytes_priv(event.cmd_received.buffer, &event.cmd_received.createdDate);
+                uint32_t createdDate, timestamp;
+                syshal_sat_read_command_40_bytes_priv(event.cmd_received.buffer, &createdDate);
                 event.id = SYSHAL_SAT_EVENT_COMMAND_RECEIVED;
+                event.cmd_received.createdDate = createdDate;
                 event.cmd_received.buffer_size = 40;
-                syshal_rtc_get_timestamp(&event.cmd_received.timestamp);
+                syshal_rtc_get_timestamp(&timestamp);
+                event.cmd_received.timestamp = timestamp;
                 DEBUG_PR_TRACE("Got CMD RECEIVED. %s()", __FUNCTION__);
                 syshal_sat_callback(&event);
                 break;

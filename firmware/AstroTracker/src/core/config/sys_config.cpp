@@ -37,9 +37,13 @@ static const sys_config_lookup_table_t sys_config_lookup_table[] =
         SYS_CONFIG_TAG(SYS_CONFIG_TAG_BLE_SETTINGS, sys_config.ble_settings, true),
         SYS_CONFIG_TAG(SYS_CONFIG_TAG_GPS_SETTINGS, sys_config.gps_settings, true),
         SYS_CONFIG_TAG(SYS_CONFIG_TAG_SAT_SETTINGS, sys_config.sat_settings, true),
-        SYS_CONFIG_TAG(SYS_CONFIG_TAG_SCHEDULER_SETTINGS, sys_config.scheduler_settings, true),
+        SYS_CONFIG_TAG(SYS_CONFIG_TAG_SCREEN_SETTINGS, sys_config.screen_settings, true),
+        SYS_CONFIG_TAG(SYS_CONFIG_TAG_SATPASS_SETTINGS, sys_config.satpass_settings, true),
+        SYS_CONFIG_TAG(SYS_CONFIG_TAG_SCHEDULER_GPS_SETTINGS, sys_config.gps_scheduler_settings, true),
+        SYS_CONFIG_TAG(SYS_CONFIG_TAG_SCHEDULER_SATPASS_SETTINGS, sys_config.satpass_scheduler_settings, false),
         SYS_CONFIG_TAG(SYS_CONFIG_TAG_BATTERY_LOW_THRESHOLD, sys_config.battery_low_threshold, false),
         SYS_CONFIG_TAG(SYS_CONFIG_TAG_GPS_LOG_POSITION_ENABLE, sys_config.gps_log_position_enable, false),
+        SYS_CONFIG_TAG(SYS_CONFIG_TAG_SATPASS_PREDICTOR_ENABLE, sys_config.satpass_predictor_enable, false),
         SYS_CONFIG_TAG(SYS_CONFIG_TAG_LOGGING_ENABLE, sys_config.logging_enable, false),
 };
 

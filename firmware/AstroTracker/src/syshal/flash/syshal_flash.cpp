@@ -1,5 +1,5 @@
 /******************************************************************************************
- * File:        syshal_batt.cpp
+ * File:        syshal_flash.cpp
  * Author:      valcesch
  * Compagny:    NA
  * Website:     https://github.com/valcesch/AstroTracker
@@ -23,54 +23,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  ******************************************************************************************/
 
-#include "../syshal_batt.h"
-#include "../syshal_gpio.h"
-#include "../../core/debug/debug.h"
+#include "../syshal_flash.h"
 #include "../syshal_config.h"
 
-#ifdef GPIO_VBAT
-#define SYSHAL_BATT_GPIO_ADC_BATT (GPIO_VBAT)
-#endif
+// #include <Adafruit_FlashTransport.h>
+// Adafruit_FlashTransport_QSPI flashTransport;
 
-// Private functions
-// ...
-
-int syshal_batt_init(void)
+int syshal_flash_init(void)
 {
-#ifdef SYSHAL_BATT_GPIO_ADC_BATT
-    syshal_gpio_init(SYSHAL_BATT_GPIO_ADC_BATT, INPUT);
-#endif
+    // flashTransport.begin();
+    // flashTransport.runCommand(0xB9);
+    // flashTransport.end();
 
-    return SYSHAL_BATT_NO_ERROR;
+    return SYSHAL_FLASH_NO_ERROR;
 }
 
-int syshal_batt_term(void)
+int syshal_flash_term(void)
 {
-    return SYSHAL_BATT_NO_ERROR;
-}
-
-int syshal_batt_voltage(uint8_t *voltage)
-{
-#ifdef SYSHAL_BATT_GPIO_ADC_BATT
-    float measuredvbat = (float)(syshal_gpio_analog_read(SYSHAL_BATT_GPIO_ADC_BATT));
-    measuredvbat *= 2;    // we divided by 2, so multiply back
-    measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
-    measuredvbat /= 1024; // convert to voltage
-    *voltage = (uint8_t)(measuredvbat * 10.0);
-
-    // DEBUG_PR_TRACE("Read battery voltage: %d", *voltage);
-#else
-    *voltage = 0;
-#endif
-
-    return SYSHAL_BATT_NO_ERROR;
-}
-
-int syshal_batt_level(uint8_t *level)
-{
-    *level = 0; // Not implemented
-
-    // DEBUG_PR_TRACE("Read battery level: %d", *level);
-
-    return SYSHAL_BATT_NO_ERROR;
+    return SYSHAL_FLASH_NO_ERROR;
 }

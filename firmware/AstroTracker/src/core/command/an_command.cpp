@@ -63,30 +63,21 @@ uint8_t COMMAND::request_is_available()
     return false;
 }
 
-void COMMAND::send_msg_data_packet(uint8_t data[40], uint32_t acknowledgedDate)
+void COMMAND::send_msg_data_packet(msg_data_packet_t *msg_data_packet)
 {
   an_packet_t an_packet;
-  msg_data_packet_t msg_data_packet;
-
-  memcpy(msg_data_packet.data, data, 40);
-  msg_data_packet.acknowledgedDate = acknowledgedDate;
-
-  encode_msg_data_packet(&an_packet, &msg_data_packet);
-
+  encode_msg_data_packet(&an_packet, msg_data_packet);
   an_packet_transmit(&an_packet);
 }
 
-uint8_t COMMAND::receive_msg_data_packet(uint8_t data[40])
+uint8_t COMMAND::receive_msg_data_packet(msg_data_packet_t *msg_data_packet)
 {
   an_packet_t an_packet;
-  msg_data_packet_t msg_data_packet;
-
   if (an_packet_receive(&an_packet, sizeof(msg_data_packet_t)) &&
-      decode_msg_data_packet(&msg_data_packet, &an_packet))
+      decode_msg_data_packet(msg_data_packet, &an_packet))
   {
     if (_with_cmd_ack == true)
       send_packet_acknowledge(an_packet, 0);
-    memcpy(data, msg_data_packet.data, 40);
     return CMD_NO_ERROR;
   }
   else
@@ -97,70 +88,21 @@ uint8_t COMMAND::receive_msg_data_packet(uint8_t data[40])
   }
 }
 
-void COMMAND::send_config_packet(uint8_t scheduler_log_data_rate,
-                                 uint8_t scheduler_gnss_pvt_retry_rate,
-                                 uint8_t scheduler_gnss_raw_retry_rate,
-                                 uint8_t scheduler_keep_alive_rate,
-                                 uint8_t scheduler_gnss_pvt_retry_count,
-                                 uint8_t scheduler_gnss_raw_retry_count,
-                                 uint8_t terminal_sat_search_rate,
-                                 int32_t asset_latitude,
-                                 int32_t asset_longitude,
-                                 uint16_t asset_interface_enabled,
-                                 uint8_t asset_power_saving)
+void COMMAND::send_config_packet(config_packet_t *config_packet)
 {
   an_packet_t an_packet;
-  config_packet_t config_packet;
-
-  config_packet.scheduler_log_data_rate = scheduler_log_data_rate;
-  config_packet.scheduler_gnss_pvt_retry_rate = scheduler_gnss_pvt_retry_rate;
-  config_packet.scheduler_gnss_raw_retry_rate = scheduler_gnss_raw_retry_rate;
-  config_packet.scheduler_keep_alive_rate = scheduler_keep_alive_rate;
-  config_packet.scheduler_gnss_pvt_retry_count = scheduler_gnss_pvt_retry_count;
-  config_packet.scheduler_gnss_raw_retry_count = scheduler_gnss_raw_retry_count;
-  config_packet.terminal_sat_search_rate = terminal_sat_search_rate;
-  config_packet.asset_latitude = asset_latitude;
-  config_packet.asset_longitude = asset_longitude;
-  config_packet.asset_interface_enabled = asset_interface_enabled;
-  config_packet.asset_power_saving = asset_power_saving;
-
-  encode_config_packet(&an_packet, &config_packet);
-
+  encode_config_packet(&an_packet, config_packet);
   an_packet_transmit(&an_packet);
 }
 
-uint8_t COMMAND::receive_config_packet(uint8_t *scheduler_log_data_rate,
-                                       uint8_t *scheduler_gnss_pvt_retry_rate,
-                                       uint8_t *scheduler_gnss_raw_retry_rate,
-                                       uint8_t *scheduler_keep_alive_rate,
-                                       uint8_t *scheduler_gnss_pvt_retry_count,
-                                       uint8_t *scheduler_gnss_raw_retry_count,
-                                       uint8_t *terminal_sat_search_rate,
-                                       int32_t *asset_latitude,
-                                       int32_t *asset_longitude,
-                                       uint16_t *asset_interface_enabled,
-                                       uint8_t *asset_power_saving)
+uint8_t COMMAND::receive_config_packet(config_packet_t *config_packet)
 {
   an_packet_t an_packet;
-  config_packet_t config_packet;
-
   if (an_packet_receive(&an_packet, sizeof(config_packet_t)) &&
-      decode_config_packet(&config_packet, &an_packet))
+      decode_config_packet(config_packet, &an_packet))
   {
     if (_with_cmd_ack == true)
       send_packet_acknowledge(an_packet, 0);
-    *scheduler_log_data_rate = config_packet.scheduler_log_data_rate;
-    *scheduler_gnss_pvt_retry_rate = config_packet.scheduler_gnss_pvt_retry_rate;
-    *scheduler_gnss_raw_retry_rate = config_packet.scheduler_gnss_raw_retry_rate;
-    *scheduler_keep_alive_rate = config_packet.scheduler_keep_alive_rate;
-    *scheduler_gnss_pvt_retry_count = config_packet.scheduler_gnss_pvt_retry_count;
-    *scheduler_gnss_raw_retry_count = config_packet.scheduler_gnss_raw_retry_count;
-    *terminal_sat_search_rate = config_packet.terminal_sat_search_rate;
-    *asset_latitude = config_packet.asset_latitude;
-    *asset_longitude = config_packet.asset_longitude;
-    *asset_interface_enabled = config_packet.asset_interface_enabled;
-    *asset_power_saving = config_packet.asset_power_saving;
-
     return CMD_NO_ERROR;
   }
   else
@@ -171,73 +113,179 @@ uint8_t COMMAND::receive_config_packet(uint8_t *scheduler_log_data_rate,
   }
 }
 
-void COMMAND::send_cmd_data_packet(uint8_t data[40], uint32_t createdDate)
+void COMMAND::send_cmd_data_packet(cmd_data_packet_t *cmd_data_packet)
 {
   an_packet_t an_packet;
-  cmd_data_packet_t cmd_data_packet;
-
-  memcpy(cmd_data_packet.data, data, 40);
-  cmd_data_packet.createdDate = createdDate;
-
-  encode_cmd_data_packet(&an_packet, &cmd_data_packet);
-
+  encode_cmd_data_packet(&an_packet, cmd_data_packet);
   an_packet_transmit(&an_packet);
 }
 
-void COMMAND::send_terminal_status_packet(uint8_t msg_in_queue,
-                                          uint8_t ack_msg_in_queue,
-                                          uint8_t last_rst,
-                                          uint32_t uptime,
-                                          uint8_t last_mac_result,
-                                          uint8_t last_sat_search_peak_rssi,
-                                          uint32_t time_since_last_sat_search,
-                                          uint32_t sys_time,
-                                          uint8_t v_bat,
-                                          int8_t temp,
-                                          int32_t lat,
-                                          int32_t lon,
-                                          uint32_t loc_epoch)
+uint8_t COMMAND::receive_cmd_data_packet(cmd_data_packet_t *cmd_data_packet)
 {
   an_packet_t an_packet;
-  terminal_status_packet_t terminal_status_packet;
+  if (an_packet_receive(&an_packet, sizeof(cmd_data_packet_t)) &&
+      decode_cmd_data_packet(cmd_data_packet, &an_packet))
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 0);
+    return CMD_NO_ERROR;
+  }
+  else
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 1);
+    return CMD_ERROR_AN_PACKET_NOT_VALID;
+  }
+}
 
-  terminal_status_packet.msg_in_queue = msg_in_queue;
-  terminal_status_packet.ack_msg_in_queue = ack_msg_in_queue;
-  terminal_status_packet.last_rst = last_rst;
-  terminal_status_packet.uptime = uptime;
-  terminal_status_packet.last_mac_result = last_mac_result;
-  terminal_status_packet.last_sat_search_peak_rssi = last_sat_search_peak_rssi;
-  terminal_status_packet.time_since_last_sat_search = time_since_last_sat_search;
-  terminal_status_packet.sys_time = sys_time;
-  terminal_status_packet.v_bat = v_bat;
-  terminal_status_packet.temp = temp;
-  terminal_status_packet.lat = lat;
-  terminal_status_packet.lon = lon;
-  terminal_status_packet.loc_epoch = loc_epoch;
-
-  encode_terminal_status_packet(&an_packet, &terminal_status_packet);
-
+void COMMAND::send_sat_status_packet(sat_status_packet_t *sat_status_packet)
+{
+  an_packet_t an_packet;
+  encode_sat_status_packet(&an_packet, sat_status_packet);
   an_packet_transmit(&an_packet);
 }
 
-void COMMAND::send_clear_msg_data_packet()
+uint8_t COMMAND::receive_sat_status_packet(sat_status_packet_t *sat_status_packet)
 {
   an_packet_t an_packet;
-  clear_msg_data_packet_t clear_msg_data_packet;
+  if (an_packet_receive(&an_packet, sizeof(sat_status_packet_t)) &&
+      decode_sat_status_packet(sat_status_packet, &an_packet))
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 0);
+    return CMD_NO_ERROR;
+  }
+  else
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 1);
+    return CMD_ERROR_AN_PACKET_NOT_VALID;
+  }
+}
 
-  encode_clear_msg_data_packet(&an_packet, &clear_msg_data_packet);
-
+void COMMAND::send_logger_status_packet(logger_status_packet_t *logger_status_packet)
+{
+  an_packet_t an_packet;
+  encode_logger_status_packet(&an_packet, logger_status_packet);
   an_packet_transmit(&an_packet);
 }
 
-void COMMAND::send_update_loc_data_packet()
+uint8_t COMMAND::receive_logger_status_packet(logger_status_packet_t *logger_status_packet)
 {
   an_packet_t an_packet;
-  update_loc_data_packet_t update_loc_data_packet;
+  if (an_packet_receive(&an_packet, sizeof(logger_status_packet_t)) &&
+      decode_logger_status_packet(logger_status_packet, &an_packet))
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 0);
+    return CMD_NO_ERROR;
+  }
+  else
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 1);
+    return CMD_ERROR_AN_PACKET_NOT_VALID;
+  }
+}
 
-  encode_update_loc_data_packet(&an_packet, &update_loc_data_packet);
-
+void COMMAND::send_gps_status_packet(gps_status_packet_t *gps_status_packet)
+{
+  an_packet_t an_packet;
+  encode_gps_status_packet(&an_packet, gps_status_packet);
   an_packet_transmit(&an_packet);
+}
+
+uint8_t COMMAND::receive_gps_status_packet(gps_status_packet_t *gps_status_packet)
+{
+  an_packet_t an_packet;
+  if (an_packet_receive(&an_packet, sizeof(gps_status_packet_t)) &&
+      decode_gps_status_packet(gps_status_packet, &an_packet))
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 0);
+    return CMD_NO_ERROR;
+  }
+  else
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 1);
+    return CMD_ERROR_AN_PACKET_NOT_VALID;
+  }
+}
+
+void COMMAND::send_ble_status_packet(ble_status_packet_t *ble_status_packet)
+{
+  an_packet_t an_packet;
+  encode_ble_status_packet(&an_packet, ble_status_packet);
+  an_packet_transmit(&an_packet);
+}
+
+uint8_t COMMAND::receive_ble_status_packet(ble_status_packet_t *ble_status_packet)
+{
+  an_packet_t an_packet;
+  if (an_packet_receive(&an_packet, sizeof(ble_status_packet_t)) &&
+      decode_ble_status_packet(ble_status_packet, &an_packet))
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 0);
+    return CMD_NO_ERROR;
+  }
+  else
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 1);
+    return CMD_ERROR_AN_PACKET_NOT_VALID;
+  }
+}
+
+void COMMAND::send_asset_status_packet(asset_status_packet_t *asset_status_packet)
+{
+  an_packet_t an_packet;
+  encode_asset_status_packet(&an_packet, asset_status_packet);
+  an_packet_transmit(&an_packet);
+}
+
+uint8_t COMMAND::receive_asset_status_packet(asset_status_packet_t *asset_status_packet)
+{
+  an_packet_t an_packet;
+  if (an_packet_receive(&an_packet, sizeof(asset_status_packet_t)) &&
+      decode_asset_status_packet(asset_status_packet, &an_packet))
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 0);
+    return CMD_NO_ERROR;
+  }
+  else
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 1);
+    return CMD_ERROR_AN_PACKET_NOT_VALID;
+  }
+}
+
+void COMMAND::send_sat_bulletin_packet(sat_bulletin_packet_t *sat_bulletin_packet)
+{
+  an_packet_t an_packet;
+  encode_sat_bulletin_packet(&an_packet, sat_bulletin_packet);
+  an_packet_transmit(&an_packet);
+}
+
+uint8_t COMMAND::receive_sat_bulletin_packet(sat_bulletin_packet_t *sat_bulletin_packet)
+{
+  an_packet_t an_packet;
+  if (an_packet_receive(&an_packet, sizeof(sat_bulletin_packet_t)) &&
+      decode_sat_bulletin_packet(sat_bulletin_packet, &an_packet))
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 0);
+    return CMD_NO_ERROR;
+  }
+  else
+  {
+    if (_with_cmd_ack == true)
+      send_packet_acknowledge(an_packet, 1);
+    return CMD_ERROR_AN_PACKET_NOT_VALID;
+  }
 }
 
 uint8_t COMMAND::receive_request_packet(uint8_t *id)

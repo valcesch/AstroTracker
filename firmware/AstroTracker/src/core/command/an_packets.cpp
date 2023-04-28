@@ -51,8 +51,7 @@ void encode_cmd_data_packet(an_packet_t *an_packet, cmd_data_packet_t *cmd_data_
 {
   an_packet->id = packet_id_cmd_data;
   an_packet->an_length = sizeof(cmd_data_packet_t);
-  memcpy(&an_packet->data[0], &cmd_data_packet->data, 40 * sizeof(uint8_t));
-  memcpy(&an_packet->data[40], &cmd_data_packet->createdDate, 1 * sizeof(uint32_t));
+  memcpy(an_packet->data, cmd_data_packet, sizeof(cmd_data_packet_t));
 }
 
 uint8_t decode_cmd_data_packet(cmd_data_packet_t *cmd_data_packet, an_packet_t *an_packet)
@@ -60,8 +59,7 @@ uint8_t decode_cmd_data_packet(cmd_data_packet_t *cmd_data_packet, an_packet_t *
   uint8_t packet_decoded = false;
   if (an_packet->id == packet_id_cmd_data && an_packet->an_length == sizeof(cmd_data_packet_t))
   {
-    memcpy(&cmd_data_packet->data, &an_packet->data[0], 40 * sizeof(uint8_t));
-    memcpy(&cmd_data_packet->createdDate, &an_packet->data[40], 1 * sizeof(uint32_t));
+    memcpy(cmd_data_packet, an_packet->data, sizeof(cmd_data_packet_t));
     packet_decoded = true;
   }
   return packet_decoded;
@@ -71,8 +69,7 @@ void encode_msg_data_packet(an_packet_t *an_packet, msg_data_packet_t *msg_data_
 {
   an_packet->id = packet_id_msg_data;
   an_packet->an_length = sizeof(msg_data_packet_t);
-  memcpy(&an_packet->data[0], &msg_data_packet->data, 40 * sizeof(uint8_t));
-  memcpy(&an_packet->data[40], &msg_data_packet->acknowledgedDate, 1 * sizeof(uint32_t));
+  memcpy(an_packet->data, msg_data_packet, sizeof(msg_data_packet_t));
 }
 
 uint8_t decode_msg_data_packet(msg_data_packet_t *msg_data_packet, an_packet_t *an_packet)
@@ -80,87 +77,115 @@ uint8_t decode_msg_data_packet(msg_data_packet_t *msg_data_packet, an_packet_t *
   uint8_t packet_decoded = false;
   if (an_packet->id == packet_id_msg_data && an_packet->an_length == sizeof(msg_data_packet_t))
   {
-    memcpy(&msg_data_packet->data, &an_packet->data[0], 40 * sizeof(uint8_t));
-    memcpy(&msg_data_packet->acknowledgedDate, &an_packet->data[40], 1 * sizeof(uint32_t));
+    memcpy(msg_data_packet, an_packet->data, sizeof(msg_data_packet_t));
     packet_decoded = true;
   }
   return packet_decoded;
 }
 
-void encode_terminal_status_packet(an_packet_t *an_packet, terminal_status_packet_t *terminal_status_packet)
+void encode_sat_status_packet(an_packet_t *an_packet, sat_status_packet_t *sat_status_packet)
 {
-  an_packet->id = packet_id_terminal_status;
-  an_packet->an_length = sizeof(terminal_status_packet_t);
-  memcpy(&an_packet->data[0], &terminal_status_packet->msg_in_queue, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[1], &terminal_status_packet->ack_msg_in_queue, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[2], &terminal_status_packet->last_rst, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[3], &terminal_status_packet->uptime, 1 * sizeof(uint32_t));
-  memcpy(&an_packet->data[7], &terminal_status_packet->last_mac_result, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[8], &terminal_status_packet->last_sat_search_peak_rssi, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[9], &terminal_status_packet->time_since_last_sat_search, 1 * sizeof(uint32_t));
-  memcpy(&an_packet->data[13], &terminal_status_packet->sys_time, 1 * sizeof(uint32_t));
-  memcpy(&an_packet->data[17], &terminal_status_packet->v_bat, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[18], &terminal_status_packet->temp, 1 * sizeof(int8_t));
-  memcpy(&an_packet->data[19], &terminal_status_packet->lat, 1 * sizeof(int32_t));
-  memcpy(&an_packet->data[23], &terminal_status_packet->lon, 1 * sizeof(int32_t));
-  memcpy(&an_packet->data[27], &terminal_status_packet->loc_epoch, 1 * sizeof(uint32_t));
+  an_packet->id = packet_id_sat_status;
+  an_packet->an_length = sizeof(sat_status_packet_t);
+  memcpy(an_packet->data, sat_status_packet, sizeof(sat_status_packet_t));
 }
 
-uint8_t decode_terminal_status_packet(terminal_status_packet_t *terminal_status_packet, an_packet_t *an_packet)
+uint8_t decode_sat_status_packet(sat_status_packet_t *sat_status_packet, an_packet_t *an_packet)
 {
   uint8_t packet_decoded = false;
-  if (an_packet->id == packet_id_terminal_status && an_packet->an_length == sizeof(terminal_status_packet_t))
+  if (an_packet->id == packet_id_sat_status && an_packet->an_length == sizeof(sat_status_packet_t))
   {
-    memcpy(&terminal_status_packet->msg_in_queue, &an_packet->data[0], 1 * sizeof(uint8_t));
-    memcpy(&terminal_status_packet->ack_msg_in_queue, &an_packet->data[1], 1 * sizeof(uint8_t));
-    memcpy(&terminal_status_packet->last_rst, &an_packet->data[2], 1 * sizeof(uint8_t));
-    memcpy(&terminal_status_packet->uptime, &an_packet->data[3], 1 * sizeof(uint32_t));
-    memcpy(&terminal_status_packet->last_mac_result, &an_packet->data[7], 1 * sizeof(uint8_t));
-    memcpy(&terminal_status_packet->last_sat_search_peak_rssi, &an_packet->data[8], 1 * sizeof(uint8_t));
-    memcpy(&terminal_status_packet->time_since_last_sat_search, &an_packet->data[9], 1 * sizeof(uint32_t));
-    memcpy(&terminal_status_packet->sys_time, &an_packet->data[13], 1 * sizeof(uint32_t));
-    memcpy(&terminal_status_packet->v_bat, &an_packet->data[17], 1 * sizeof(uint8_t));
-    memcpy(&terminal_status_packet->temp, &an_packet->data[18], 1 * sizeof(int8_t));
-    memcpy(&terminal_status_packet->lat, &an_packet->data[19], 1 * sizeof(int32_t));
-    memcpy(&terminal_status_packet->lon, &an_packet->data[23], 1 * sizeof(int32_t));
-    memcpy(&terminal_status_packet->loc_epoch, &an_packet->data[27], 1 * sizeof(uint32_t));
+    memcpy(sat_status_packet, an_packet->data, sizeof(sat_status_packet_t));
     packet_decoded = true;
   }
   return packet_decoded;
 }
 
-void encode_clear_msg_data_packet(an_packet_t *an_packet, clear_msg_data_packet_t *clear_msg_data_packet)
+void encode_logger_status_packet(an_packet_t *an_packet, logger_status_packet_t *logger_status_packet)
 {
-  an_packet->id = packet_id_clear_msg_data;
-  an_packet->an_length = sizeof(clear_msg_data_packet_t);
-  // Empty
+  an_packet->id = packet_id_logger_status;
+  an_packet->an_length = sizeof(logger_status_packet_t);
+  memcpy(an_packet->data, logger_status_packet, sizeof(logger_status_packet_t));
 }
 
-uint8_t decode_clear_msg_data_packet(clear_msg_data_packet_t *clear_msg_data_packet, an_packet_t *an_packet)
+uint8_t decode_logger_status_packet(logger_status_packet_t *logger_status_packet, an_packet_t *an_packet)
 {
   uint8_t packet_decoded = false;
-  if (an_packet->id == packet_id_clear_msg_data && an_packet->an_length == sizeof(clear_msg_data_packet_t))
+  if (an_packet->id == packet_id_logger_status && an_packet->an_length == sizeof(logger_status_packet_t))
   {
-    // Empty
+    memcpy(logger_status_packet, an_packet->data, sizeof(logger_status_packet_t));
     packet_decoded = true;
   }
   return packet_decoded;
 }
 
-
-void encode_update_loc_data_packet(an_packet_t *an_packet, update_loc_data_packet_t *update_loc_data_packet)
+void encode_gps_status_packet(an_packet_t *an_packet, gps_status_packet_t *gps_status_packet)
 {
-  an_packet->id = packet_id_update_loc_data;
-  an_packet->an_length = sizeof(update_loc_data_packet_t);
-  // Empty
+  an_packet->id = packet_id_gps_status;
+  an_packet->an_length = sizeof(gps_status_packet_t);
+  memcpy(an_packet->data, gps_status_packet, sizeof(gps_status_packet_t));
 }
 
-uint8_t decode_update_loc_data_packet(update_loc_data_packet_t *update_loc_data_packet, an_packet_t *an_packet)
+uint8_t decode_gps_status_packet(gps_status_packet_t *gps_status_packet, an_packet_t *an_packet)
 {
   uint8_t packet_decoded = false;
-  if (an_packet->id == packet_id_update_loc_data && an_packet->an_length == sizeof(update_loc_data_packet_t))
+  if (an_packet->id == packet_id_gps_status && an_packet->an_length == sizeof(gps_status_packet_t))
   {
-    // Empty
+    memcpy(gps_status_packet, an_packet->data, sizeof(gps_status_packet_t));
+    packet_decoded = true;
+  }
+  return packet_decoded;
+}
+
+void encode_ble_status_packet(an_packet_t *an_packet, ble_status_packet_t *ble_status_packet)
+{
+  an_packet->id = packet_id_ble_status;
+  an_packet->an_length = sizeof(ble_status_packet_t);
+  memcpy(an_packet->data, ble_status_packet, sizeof(ble_status_packet_t));
+}
+
+uint8_t decode_ble_status_packet(ble_status_packet_t *ble_status_packet, an_packet_t *an_packet)
+{
+  uint8_t packet_decoded = false;
+  if (an_packet->id == packet_id_ble_status && an_packet->an_length == sizeof(ble_status_packet_t))
+  {
+    memcpy(ble_status_packet, an_packet->data, sizeof(ble_status_packet_t));
+    packet_decoded = true;
+  }
+  return packet_decoded;
+}
+
+void encode_asset_status_packet(an_packet_t *an_packet, asset_status_packet_t *asset_status_packet)
+{
+  an_packet->id = packet_id_asset_status;
+  an_packet->an_length = sizeof(asset_status_packet_t);
+  memcpy(an_packet->data, asset_status_packet, sizeof(asset_status_packet_t));
+}
+
+uint8_t decode_asset_status_packet(asset_status_packet_t *asset_status_packet, an_packet_t *an_packet)
+{
+  uint8_t packet_decoded = false;
+  if (an_packet->id == packet_id_asset_status && an_packet->an_length == sizeof(asset_status_packet_t))
+  {
+    memcpy(asset_status_packet, an_packet->data, sizeof(asset_status_packet_t));
+    packet_decoded = true;
+  }
+  return packet_decoded;
+}
+
+void encode_sat_bulletin_packet(an_packet_t *an_packet, sat_bulletin_packet_t *sat_bulletin_packet)
+{
+  an_packet->id = packet_id_sat_bulletin;
+  an_packet->an_length = sizeof(sat_bulletin_packet_t);
+  memcpy(an_packet->data, sat_bulletin_packet, sizeof(sat_bulletin_packet_t));
+}
+
+uint8_t decode_sat_bulletin_packet(sat_bulletin_packet_t *sat_bulletin_packet, an_packet_t *an_packet)
+{
+  uint8_t packet_decoded = false;
+  if (an_packet->id == packet_id_sat_bulletin && an_packet->an_length == sizeof(sat_bulletin_packet_t))
+  {
+    memcpy(sat_bulletin_packet, an_packet->data, sizeof(sat_bulletin_packet_t));
     packet_decoded = true;
   }
   return packet_decoded;
@@ -170,17 +195,7 @@ void encode_config_packet(an_packet_t *an_packet, config_packet_t *config_packet
 {
   an_packet->id = packet_id_config;
   an_packet->an_length = sizeof(config_packet_t);
-  memcpy(&an_packet->data[0], &config_packet->scheduler_log_data_rate, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[1], &config_packet->scheduler_gnss_pvt_retry_rate, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[2], &config_packet->scheduler_gnss_raw_retry_rate, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[3], &config_packet->scheduler_keep_alive_rate, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[4], &config_packet->scheduler_gnss_pvt_retry_count, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[5], &config_packet->scheduler_gnss_raw_retry_count, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[6], &config_packet->terminal_sat_search_rate, 1 * sizeof(uint8_t));
-  memcpy(&an_packet->data[7], &config_packet->asset_latitude, 1 * sizeof(int32_t));
-  memcpy(&an_packet->data[11], &config_packet->asset_longitude, 1 * sizeof(int32_t));
-  memcpy(&an_packet->data[15], &config_packet->asset_interface_enabled, 1 * sizeof(uint16_t));
-  memcpy(&an_packet->data[17], &config_packet->asset_power_saving, 1 * sizeof(uint8_t));
+  memcpy(an_packet->data, config_packet, sizeof(config_packet_t));
 }
 
 uint8_t decode_config_packet(config_packet_t *config_packet, an_packet_t *an_packet)
@@ -188,17 +203,7 @@ uint8_t decode_config_packet(config_packet_t *config_packet, an_packet_t *an_pac
   uint8_t packet_decoded = false;
   if (an_packet->id == packet_id_config && an_packet->an_length == sizeof(config_packet_t))
   {
-    memcpy(&config_packet->scheduler_log_data_rate, &an_packet->data[0], 1 * sizeof(uint8_t));
-    memcpy(&config_packet->scheduler_gnss_pvt_retry_rate, &an_packet->data[1], 1 * sizeof(uint8_t));
-    memcpy(&config_packet->scheduler_gnss_raw_retry_rate, &an_packet->data[2], 1 * sizeof(uint8_t));
-    memcpy(&config_packet->scheduler_keep_alive_rate, &an_packet->data[3], 1 * sizeof(uint8_t));
-    memcpy(&config_packet->scheduler_gnss_pvt_retry_count, &an_packet->data[4], 1 * sizeof(uint8_t));
-    memcpy(&config_packet->scheduler_gnss_raw_retry_count, &an_packet->data[5], 1 * sizeof(uint8_t));
-    memcpy(&config_packet->terminal_sat_search_rate, &an_packet->data[6], 1 * sizeof(uint8_t));
-    memcpy(&config_packet->asset_latitude, &an_packet->data[7], 1 * sizeof(int32_t));
-    memcpy(&config_packet->asset_longitude, &an_packet->data[11], 1 * sizeof(int32_t));
-    memcpy(&config_packet->asset_interface_enabled, &an_packet->data[15], 1 * sizeof(uint16_t));
-    memcpy(&config_packet->asset_power_saving, &an_packet->data[17], 1 * sizeof(uint8_t));
+    memcpy(config_packet, an_packet->data, sizeof(config_packet_t));
     packet_decoded = true;
   }
   return packet_decoded;

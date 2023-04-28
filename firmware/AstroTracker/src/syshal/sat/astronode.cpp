@@ -62,7 +62,15 @@ ans_status_e ASTRONODE::configuration_write(bool with_pl_ack,
                                             bool with_tx_pend_event_pin_mask)
 {
   DEBUG_PR_TRACE("Set configuration. %s()", __FUNCTION__);
-
+  DEBUG_PR_TRACE("with_pl_ack = %d", with_pl_ack);
+  DEBUG_PR_TRACE("with_geoloc = %d", with_geoloc);
+  DEBUG_PR_TRACE("with_ephemeris = %d", with_ephemeris);
+  DEBUG_PR_TRACE("with_deep_sleep = %d", with_deep_sleep);
+  DEBUG_PR_TRACE("with_ack_event_pin_mask = %d", with_ack_event_pin_mask);
+  DEBUG_PR_TRACE("with_reset_event_pin_mask = %d", with_reset_event_pin_mask);
+  DEBUG_PR_TRACE("with_cmd_event_pin_mask = %d", with_cmd_event_pin_mask);
+  DEBUG_PR_TRACE("with_tx_pend_event_pin_mask = %d", with_tx_pend_event_pin_mask);
+  
   // Set parameters
   uint8_t param_w[3] = {};
 

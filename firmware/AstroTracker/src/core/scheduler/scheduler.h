@@ -23,8 +23,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  ******************************************************************************************/
 
-#ifndef _APP_SCHEDULER_h
-#define _APP_SCHEDULER_h
+#ifndef _SCHEDULER_h
+#define _SCHEDULER_h
 
 #if defined(ARDUINO) && ARDUINO >= 100
 #include "arduino.h"
@@ -34,14 +34,14 @@
 
 #include "../config/sys_config.h"
 
-#define SCHEDULER_NO_ERROR            ( 0)
+#define SCHEDULER_NO_ERROR (0)
 #define SCHEDULER_ERROR_INVALID_STATE (-1)
 #define SCHEDULER_ERROR_INVALID_PARAM (-2)
 
 typedef enum
 {
     SCHEDULER_EVENT_GPS_START,
-    SCHEDULER_EVENT_GPS_TIMEOUT,
+    SCHEDULER_EVENT_SATPASS_START,
 } scheduler_event_id_t;
 
 typedef struct
@@ -51,21 +51,30 @@ typedef struct
 
 typedef struct
 {
-    sys_config_scheduler_settings_t *scheduler;
-} scheduler_config_t;
+    sys_config_gps_scheduler_settings_t *scheduler;
+} scheduler_gps_config_t;
+
+typedef struct
+{
+    sys_config_satpass_scheduler_settings_t *scheduler;
+} scheduler_satpass_config_t;
 
 int scheduler_init(void);
-int scheduler_update_config(scheduler_config_t scheduler_config);
 int scheduler_term(void);
 int scheduler_get_timestamp_next_alarm(uint32_t *timestamp);
 
+int scheduler_gps_update_config(scheduler_gps_config_t scheduler_gps_config);
 int scheduler_gps_start(void);
 int scheduler_gps_stop(void);
+
+int scheduler_satpass_update_config(scheduler_satpass_config_t scheduler_satpass_config);
+int scheduler_satpass_start(void);
+int scheduler_satpass_stop(void);
 
 int scheduler_tick(void);
 
 void scheduler_gps_callback(scheduler_event_t *event);
-
+void scheduler_satpass_callback(scheduler_event_t *event);
 
 /* Hints from UBLOX on GNSS configuration and fallback strategy
 https://developer.thingstream.io/guides/location-services/cloudlocate-getting-started/mixed_mode

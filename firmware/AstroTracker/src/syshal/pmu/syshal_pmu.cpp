@@ -28,8 +28,8 @@
 #include "../syshal_gpio.h"
 #include "../syshal_time.h"
 #include "../syshal_sat.h"
-#include "../syshal_config.h"
 #include "../../core/debug/debug.h"
+#include "../syshal_config.h"
 #include <Wire.h>
 
 #ifdef GPIO_HWDT_RESET
@@ -93,7 +93,7 @@ void syshal_pmu_sleep(syshal_pmu_sleep_mode_t mode)
 
         if (soft_wdt_running)
         {
-            // syshal_rtc_soft_watchdog_disable();
+            syshal_rtc_soft_watchdog_disable();
         }
 
         // Go to sleep
@@ -101,14 +101,11 @@ void syshal_pmu_sleep(syshal_pmu_sleep_mode_t mode)
         Wire.end();
         UART_ANS.end();
 
-        nrf_gpio_cfg_default(PIN_WIRE_SDA);
-        nrf_gpio_cfg_default(PIN_WIRE_SCL);
-        nrf_gpio_cfg(PIN_SERIAL1_RX, Correct ? should be TX ?
-                     NRF_GPIO_PIN_DIR_INPUT,
-                     NRF_GPIO_PIN_INPUT_DISCONNECT,
-                     NRF_GPIO_PIN_PULLDOWN,
-                     NRF_GPIO_PIN_S0S1,
-                     NRF_GPIO_PIN_NOSENSE);
+        nrf_gpio_cfg_default(g_ADigitalPinMap[PIN_WIRE_SDA]);
+        nrf_gpio_cfg_default(g_ADigitalPinMap[PIN_WIRE_SCL]);
+
+        nrf_gpio_cfg_default(g_ADigitalPinMap[GPIO_ANS_EXT_INT]);
+
 
         suspendLoop();
 
@@ -147,7 +144,7 @@ void syshal_pmu_sleep(syshal_pmu_sleep_mode_t mode)
 #endif
 
         // Enable back software watchdog
-        // syshal_rtc_soft_watchdog_enable();
+        syshal_rtc_soft_watchdog_enable();
         break;
     }
     case SLEEP_LIGHT:

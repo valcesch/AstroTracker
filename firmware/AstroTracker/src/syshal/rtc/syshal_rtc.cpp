@@ -37,7 +37,11 @@
 #define NRF_RTC_OVERFLOW_SEC 0x1FFFFF
 #endif
 
+#if defined(NRF52_SERIES)
 #define RTC_TIME_KEEPING_FREQUENCY_HZ (8) // 8 Hz, this is the lowest speed available
+#elif defined(ARDUINO_ARCH_SAMD)
+#define RTC_TIME_KEEPING_FREQUENCY_HZ (32) // 32 Hz, this is the lowest speed available
+#endif
 
 static bool soft_watchdog_init;
 
@@ -244,14 +248,14 @@ int syshal_rtc_set_alarm(uint32_t timestamp, const voidFuncPtr callback)
 
 #if defined(NRF52_SERIES)
     functionPointer = callback;
-    nrf_rtc_cc_set(NRF_RTCZ, 0, (nrf_rtc_counter_get(NRF_RTCZ) >> 0x3) + delay_s * RTC_TIME_KEEPING_FREQUENCY_HZ);
+    nrf_rtc_cc_set(NRF_RTCZ, 0, delay_s * RTC_TIME_KEEPING_FREQUENCY_HZ);
 #elif defined(ARDUINO_ARCH_SAMD)
     syshal_rtc_disable_alarm();
     _g_RTC_callBack = callback;
 
     // clear any pending interrupts, set compare register and enable interrupt
     RTC->MODE0.INTFLAG.reg = RTC_MODE0_INTFLAG_MASK;
-    RTC->MODE0.COMP[0].reg = delay_s << 5;
+    RTC->MODE0.COMP[0].reg = delay_s << 5; // delay_s * RTC_TIME_KEEPING_FREQUENCY_HZ
     RTC->MODE0.INTENSET.bit.CMP0 = 1;
 #endif
 
@@ -379,8 +383,8 @@ int syshal_rtc_soft_watchdog_set(unsigned int seconds)
     while (WDT->STATUS.bit.SYNCBUSY)
         ; // Sync CTRL write
 
-    syshal_rtc_soft_watchdog_refresh();                  // Clear watchdog interval
-    WDT->CTRL.bit.ENABLE = 1; // Start watchdog now!
+    syshal_rtc_soft_watchdog_refresh(); // Clear watchdog interval
+    WDT->CTRL.bit.ENABLE = 1;           // Start watchdog now!
     while (WDT->STATUS.bit.SYNCBUSY)
         ;
 #endif

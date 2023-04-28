@@ -37,10 +37,12 @@
 #include "../../syshal/syshal_led.h"
 #include "../../syshal/syshal_batt.h"
 #include "../../syshal/syshal_gps.h"
+#include "../../syshal/syshal_screen.h"
 #include "../../syshal/syshal_temp.h"
 #include "../../syshal/syshal_sat.h"
 #include "../../syshal/syshal_ble.h"
 #include "../../syshal/syshal_gpio.h"
+#include "../../syshal/syshal_flash.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////// MAIN STATES ///////////////////////////////////
@@ -85,10 +87,12 @@ static const char *sm_main_state_str[] =
 #define LED_BLINK_TEST_PASSED_DURATION_MS (2 * LED_BLINK_FAIL_DURATION_MS)
 #define LED_DEACTIVATED_STATE_DURATION_MS (6000)
 
-#define SOFT_WATCHDOG_TIMEOUT_S (16)   // How many seconds to allow before soft watchdog trips -> DO NOT SET LOWER THAN 16S
-#define HARD_WATCHDOG_TIMEOUT_S (3600) // How many seconds to allow before soft watchdog trips -> WILL DEPEND ON HARDWARE CONFIGURATION
+#define SOFT_WATCHDOG_TIMEOUT_S (16)  // How many seconds to allow before soft watchdog trips -> DO NOT SET LOWER THAN 16S
+#define HARD_WATCHDOG_TIMEOUT_S (300) // How many seconds to allow before soft watchdog trips -> WILL DEPEND ON HARDWARE CONFIGURATION
 
 #define GPS_ACTIVE_WAKEUP_TIMEOUT_S (3)
+
+#define SCREEN_DURATION_MS (10000)
 
 #define RTC_DEFAULT_TIMESTAMP_S (1514764740 + 50) // Sun Dec 31 2017 23:59:00 GMT+0000
 
@@ -98,11 +102,14 @@ static uint8_t last_battery_reading;
 static volatile bool sensor_logging_enabled = false; // Are sensors currently allowed to log
 static volatile bool logger_new_data_available = false;
 static volatile bool new_config_available = false;
+static volatile bool request_sat_status_update = false;
+static volatile bool request_screen_display_activation = false;
 
 static uint32_t gps_start_time;
 static uint32_t sat_start_time;
 static uint32_t ble_start_time;
 static uint32_t led_finish_time;
+static uint32_t screen_finish_time;
 
 COMMAND syshal_ble_command;
 COMMAND syshal_sat_command;
@@ -140,16 +147,16 @@ typedef struct __attribute__((__packed__))
 #define LOGGER_TAG_U_CMD_SLOT (0x03)
 #define LOGGER_TAG_RAW_SLOT (0x04)
 
-typedef struct
+typedef struct __attribute__((__packed__))
 {
-    struct
+    struct __attribute__((__packed__))
     {
         syshal_sat_status_t status;
         uint16_t reset_cnt = 0;
         uint32_t uptime = 0;
     } sat_counters;
 
-    struct
+    struct __attribute__((__packed__))
     {
         uint16_t u_msg_cnt = 0;
         uint16_t u_cmd_cnt = 0;
@@ -158,7 +165,7 @@ typedef struct
         // uint32_t total_mem_size = 0;
     } logger_counters;
 
-    struct
+    struct __attribute__((__packed__))
     {
         uint16_t meas_cnt = 0;
         int32_t last_loc_lat = 0;
@@ -167,17 +174,16 @@ typedef struct
         uint32_t uptime = 0;
     } gps_counters;
 
-    struct
+    struct __attribute__((__packed__))
     {
         uint32_t advert_burst_cnt = 0;
         uint16_t user_connection_cnt = 0;
         uint32_t uptime = 0;
     } ble_counters;
 
-    struct
+    struct __attribute__((__packed__))
     {
-        uint32_t sleep_time = 0;
-        uint32_t up_time = 0;
+        uint32_t up_time_ms = 0;
     } asset_counters;
 } sm_context_t;
 static sm_context_t sm_context;
@@ -292,8 +298,20 @@ void scheduler_gps_callback(scheduler_event_t *event)
     case SCHEDULER_EVENT_GPS_START:
         syshal_gps_wake_up();
         break;
-    case SCHEDULER_EVENT_GPS_TIMEOUT:
-        syshal_gps_shutdown();
+    default:
+        DEBUG_PR_WARN("Unknown SCHEDULER event in %s() : %d", __FUNCTION__, event->id);
+        break;
+    }
+}
+
+void scheduler_satpass_callback(scheduler_event_t *event)
+{
+    DEBUG_PR_TRACE("%s() called", __FUNCTION__);
+
+    switch (event->id)
+    {
+    case SCHEDULER_EVENT_SATPASS_START:
+        logger_new_data_available = true;
         break;
     default:
         DEBUG_PR_WARN("Unknown SCHEDULER event in %s() : %d", __FUNCTION__, event->id);
@@ -326,13 +344,16 @@ void syshal_sat_callback(syshal_sat_event_t *event)
         if ((slot_tag == LOGGER_TAG_PVT_SLOT) ||
             (slot_tag == LOGGER_TAG_RAW_SLOT)) // We keep all other slots
             logger_clear_slot(event->msg_acknowledged.msg_id);
+        request_sat_status_update = true;
         break;
     }
     case SYSHAL_SAT_EVENT_RESET:
         DEBUG_PR_TRACE("SYSHAL_SAT_EVENT_RESET");
         sm_context.sat_counters.reset_cnt++;
+        request_sat_status_update = true;
         break;
     case SYSHAL_SAT_EVENT_COMMAND_RECEIVED:
+    {
         DEBUG_PR_TRACE("SYSHAL_SAT_EVENT_COMMAND_RECEIVED");
 
         // Write data to virtual stream
@@ -350,10 +371,12 @@ void syshal_sat_callback(syshal_sat_event_t *event)
             case packet_id_msg_data:
             {
                 DEBUG_PR_TRACE("Receive user message data.");
+                msg_data_packet_t msg_data_packet;
                 LOG_U_MSG_struct log_u_cmd;
                 uint16_t slot_id = 0;
-                if (!syshal_sat_command.receive_msg_data_packet(log_u_cmd.data))
+                if (!syshal_sat_command.receive_msg_data_packet(&msg_data_packet))
                 {
+                    memcpy(log_u_cmd.data, msg_data_packet.data, sizeof(msg_data_packet.data));
                     logger_insert_data(&log_u_cmd, sizeof(LOG_U_CMD_struct), LOGGER_TAG_U_CMD_SLOT,
                                        event->cmd_received.createdDate, &slot_id);
                     logger_set_acknowledgeddate_of_slot_id(slot_id, event->cmd_received.timestamp);
@@ -366,38 +389,47 @@ void syshal_sat_callback(syshal_sat_event_t *event)
             {
                 DEBUG_PR_TRACE("Receive new configuration.");
 
-                uint8_t scheduler_log_data_rate;
-                uint8_t scheduler_gnss_pvt_retry_rate;
-                uint8_t scheduler_gnss_raw_retry_rate;
-                uint8_t scheduler_keep_alive_rate;
-                uint8_t scheduler_gnss_pvt_retry_count;
-                uint8_t scheduler_gnss_raw_retry_count;
-                uint8_t terminal_sat_search_rate;
-                int32_t asset_latitude;
-                int32_t asset_longitude;
-                uint16_t asset_interface_enabled;
-                uint8_t asset_power_saving;
+                config_packet_t config_packet;
 
-                if (!syshal_sat_command.receive_config_packet(&scheduler_log_data_rate,
-                                                              &scheduler_gnss_pvt_retry_rate,
-                                                              &scheduler_gnss_raw_retry_rate,
-                                                              &scheduler_keep_alive_rate,
-                                                              &scheduler_gnss_pvt_retry_count,
-                                                              &scheduler_gnss_raw_retry_count,
-                                                              &terminal_sat_search_rate,
-                                                              &asset_latitude,
-                                                              &asset_longitude,
-                                                              &asset_interface_enabled,
-                                                              &asset_power_saving))
+                if (!syshal_sat_command.receive_config_packet(&config_packet))
                 {
-                    // Save tracker configuration (TODO: Save to file system)
-                    sys_config.sat_settings.contents.sat_search_rate = terminal_sat_search_rate;
+                    sys_config.gps_settings.contents.with_gps = config_packet.gps_settings_with_gps;
+                    sys_config.gps_settings.contents.with_galileo = config_packet.gps_settings_with_galileo;
+                    sys_config.gps_settings.contents.with_beidou = config_packet.gps_settings_with_beidou;
+                    sys_config.gps_settings.contents.with_glonass = config_packet.gps_settings_with_glonass;
+                    sys_config.gps_settings.contents.with_rxm_meas20 = config_packet.gps_settings_with_rxm_meas20;
+                    sys_config.gps_settings.contents.raw_timeout_s = config_packet.gps_settings_raw_timeout_s;
 
-                    sys_config.scheduler_settings.contents.gps_interval_h = scheduler_log_data_rate;
-                    sys_config.scheduler_settings.contents.gps_timeout_s = 120;
+                    sys_config.sat_settings.contents.with_pld_ack = config_packet.sat_settings_with_pld_ack;
+                    sys_config.sat_settings.contents.with_geo_loc = config_packet.sat_settings_with_geo_loc;
+                    sys_config.sat_settings.contents.with_ephemeris = config_packet.sat_settings_with_ephemeris;
+                    sys_config.sat_settings.contents.with_deep_sleep_en = config_packet.sat_settings_with_deep_sleep_en;
+                    sys_config.sat_settings.contents.with_msg_ack_pin_en = config_packet.sat_settings_with_msg_ack_pin_en;
+                    sys_config.sat_settings.contents.with_msg_reset_pin_en = config_packet.sat_settings_with_msg_reset_pin_en;
+                    sys_config.sat_settings.contents.with_cmd_event_pin_en = config_packet.sat_settings_with_cmd_event_pin_en;
+                    sys_config.sat_settings.contents.with_tx_pend_event_pin_en = config_packet.sat_settings_with_tx_pend_event_pin_en;
+                    sys_config.sat_settings.contents.sat_force_search = config_packet.sat_settings_sat_force_search;
+                    sys_config.sat_settings.contents.sat_search_rate = config_packet.sat_settings_sat_search_rate;
+
+                    sys_config.gps_scheduler_settings.contents.interval_h = config_packet.scheduler_settings_gps_interval_h;
+                    sys_config.gps_settings.contents.pvt_timeout_s = config_packet.gps_settings_pvt_timeout_s;
+
+                    sys_config.battery_low_threshold.contents.threshold = config_packet.battery_low_threshhold;
 
                     new_config_available = true;
                 }
+                break;
+            }
+            case packet_id_sat_bulletin:
+            {
+                DEBUG_PR_TRACE("Receive new sat. bulletin.");
+
+                sat_bulletin_packet_t sat_bulletin_packet;
+
+                if (!syshal_sat_command.receive_sat_bulletin_packet(&sat_bulletin_packet))
+                {
+                }
+                break;
             }
             default:
                 break;
@@ -406,12 +438,13 @@ void syshal_sat_callback(syshal_sat_event_t *event)
             // Clear buffer, ready for new command
             sat_stream.clear();
         }
-        break;
 
+        request_sat_status_update = true;
+        break;
+    }
     case SYSHAL_SAT_EVENT_MESSAGE_PENDING:
         DEBUG_PR_TRACE("SYSHAL_SAT_EVENT_MESSAGE_PENDING");
         break;
-
     default:
         DEBUG_PR_WARN("Unknown SAT event in %s() : %d", __FUNCTION__, event->id);
         break;
@@ -450,15 +483,63 @@ void syshal_ble_callback(syshal_ble_event_t *event)
             case packet_id_msg_data:
             {
                 DEBUG_PR_TRACE("Receive user message data.");
+                msg_data_packet_t msg_data_packet;
                 LOG_U_MSG_struct log_u_msg;
                 uint16_t slot_id = 0;
-                if (!syshal_ble_command.receive_msg_data_packet(log_u_msg.data))
+                if (!syshal_ble_command.receive_msg_data_packet(&msg_data_packet))
                 {
+                    memcpy(log_u_msg.data, msg_data_packet.data, sizeof(msg_data_packet.data));
                     logger_insert_data(&log_u_msg, sizeof(LOG_U_MSG_struct), LOGGER_TAG_U_MSG_SLOT,
                                        syshal_rtc_return_timestamp(), &slot_id);
                     sm_context.logger_counters.u_msg_cnt++;
                     logger_new_data_available = true;
                     ble_write_req();
+                }
+                break;
+            }
+            case packet_id_config:
+            {
+                DEBUG_PR_TRACE("Receive new configuration.");
+
+                config_packet_t config_packet;
+
+                if (!syshal_ble_command.receive_config_packet(&config_packet))
+                {
+                    sys_config.gps_settings.contents.with_gps = config_packet.gps_settings_with_gps;
+                    sys_config.gps_settings.contents.with_galileo = config_packet.gps_settings_with_galileo;
+                    sys_config.gps_settings.contents.with_beidou = config_packet.gps_settings_with_beidou;
+                    sys_config.gps_settings.contents.with_glonass = config_packet.gps_settings_with_glonass;
+                    sys_config.gps_settings.contents.with_rxm_meas20 = config_packet.gps_settings_with_rxm_meas20;
+                    sys_config.gps_settings.contents.raw_timeout_s = config_packet.gps_settings_raw_timeout_s;
+
+                    sys_config.sat_settings.contents.with_pld_ack = config_packet.sat_settings_with_pld_ack;
+                    sys_config.sat_settings.contents.with_geo_loc = config_packet.sat_settings_with_geo_loc;
+                    sys_config.sat_settings.contents.with_ephemeris = config_packet.sat_settings_with_ephemeris;
+                    sys_config.sat_settings.contents.with_deep_sleep_en = config_packet.sat_settings_with_deep_sleep_en;
+                    sys_config.sat_settings.contents.with_msg_ack_pin_en = config_packet.sat_settings_with_msg_ack_pin_en;
+                    sys_config.sat_settings.contents.with_msg_reset_pin_en = config_packet.sat_settings_with_msg_reset_pin_en;
+                    sys_config.sat_settings.contents.with_cmd_event_pin_en = config_packet.sat_settings_with_cmd_event_pin_en;
+                    sys_config.sat_settings.contents.with_tx_pend_event_pin_en = config_packet.sat_settings_with_tx_pend_event_pin_en;
+                    sys_config.sat_settings.contents.sat_force_search = config_packet.sat_settings_sat_force_search;
+                    sys_config.sat_settings.contents.sat_search_rate = config_packet.sat_settings_sat_search_rate;
+
+                    sys_config.gps_scheduler_settings.contents.interval_h = config_packet.scheduler_settings_gps_interval_h;
+                    sys_config.gps_settings.contents.pvt_timeout_s = config_packet.gps_settings_pvt_timeout_s;
+
+                    sys_config.battery_low_threshold.contents.threshold = config_packet.battery_low_threshhold;
+
+                    new_config_available = true;
+                }
+                break;
+            }
+            case packet_id_sat_bulletin:
+            {
+                DEBUG_PR_TRACE("Receive new sat. bulletin.");
+
+                sat_bulletin_packet_t sat_bulletin_packet;
+
+                if (!syshal_ble_command.receive_sat_bulletin_packet(&sat_bulletin_packet))
+                {
                 }
                 break;
             }
@@ -472,44 +553,98 @@ void syshal_ble_callback(syshal_ble_event_t *event)
 
                     switch (request_id)
                     {
-                    case packet_id_terminal_status:
+                    case packet_id_sat_status:
+                    {
+                        DEBUG_PR_TRACE("Send sat status report.");
+                        sat_status_packet_t sat_status_packet;
+
+                        sat_status_packet.sat_detect_operation_cnt = sm_context.sat_counters.status.sat_detect_operation_cnt;
+                        sat_status_packet.signal_demod_attempt_cnt = sm_context.sat_counters.status.signal_demod_attempt_cnt;
+                        sat_status_packet.ack_demod_attempt_cnt = sm_context.sat_counters.status.ack_demod_attempt_cnt;
+                        sat_status_packet.sent_fragment_cnt = sm_context.sat_counters.status.sent_fragment_cnt;
+                        sat_status_packet.ack_fragment_cnt = sm_context.sat_counters.status.ack_fragment_cnt;
+                        sat_status_packet.queued_msg_cnt = sm_context.sat_counters.status.queued_msg_cnt;
+                        sat_status_packet.time_start_last_contact = sm_context.sat_counters.status.time_start_last_contact;
+                        sat_status_packet.time_end_last_contact = sm_context.sat_counters.status.time_end_last_contact;
+                        sat_status_packet.peak_rssi_last_contact = sm_context.sat_counters.status.peak_rssi_last_contact;
+                        sat_status_packet.time_peak_rssi_last_contact = sm_context.sat_counters.status.time_peak_rssi_last_contact;
+                        sat_status_packet.uptime = sm_context.sat_counters.status.uptime;
+                        sat_status_packet.reset_cnt = sm_context.sat_counters.reset_cnt;
+
+                        request_sat_status_update = true;
+
+                        syshal_ble_command.send_sat_status_packet(&sat_status_packet);
+                        ble_write_req();
+                        break;
+                    }
+                    case packet_id_logger_status:
+                    {
+                        DEBUG_PR_TRACE("Send logger status report.");
+                        logger_status_packet_t logger_status_packet;
+
+                        logger_status_packet.u_msg_cnt = sm_context.logger_counters.u_msg_cnt;
+                        logger_status_packet.u_cmd_cnt = sm_context.logger_counters.u_cmd_cnt;
+                        logger_status_packet.pvt_cnt = sm_context.logger_counters.pvt_cnt;
+                        logger_status_packet.raw_cnt = sm_context.logger_counters.raw_cnt;
+
+                        syshal_ble_command.send_logger_status_packet(&logger_status_packet);
+                        ble_write_req();
+                        break;
+                    }
+                    case packet_id_gps_status:
+                    {
+                        DEBUG_PR_TRACE("Send gps status report.");
+                        gps_status_packet_t gps_status_packet;
+
+                        gps_status_packet.meas_cnt = sm_context.gps_counters.meas_cnt;
+                        gps_status_packet.last_loc_lat = sm_context.gps_counters.last_loc_lat;
+                        gps_status_packet.last_loc_lon = sm_context.gps_counters.last_loc_lon;
+                        gps_status_packet.time_last_update = sm_context.gps_counters.time_last_update;
+                        gps_status_packet.uptime = sm_context.gps_counters.uptime;
+
+                        syshal_ble_command.send_gps_status_packet(&gps_status_packet);
+                        ble_write_req();
+                        break;
+                    }
+                    case packet_id_ble_status:
+                    {
+                        DEBUG_PR_TRACE("Send ble status report.");
+                        ble_status_packet_t ble_status_packet;
+
+                        ble_status_packet.advert_burst_cnt = sm_context.ble_counters.advert_burst_cnt;
+                        ble_status_packet.user_connection_cnt = sm_context.ble_counters.user_connection_cnt;
+
+                        syshal_ble_command.send_ble_status_packet(&ble_status_packet);
+                        ble_write_req();
+                        break;
+                    }
+                    case packet_id_asset_status:
                     {
                         DEBUG_PR_TRACE("Send asset status report.");
-                        syshal_ble_command.send_terminal_status_packet(sm_context.sat_counters.status.queued_msg_cnt,
-                                                                       sm_context.sat_counters.status.ack_fragment_cnt,
-                                                                       0,
-                                                                       sm_context.sat_counters.status.uptime,
-                                                                       0,
-                                                                       sm_context.sat_counters.status.peak_rssi_last_contact,
-                                                                       sm_context.sat_counters.status.time_peak_rssi_last_contact,
-                                                                       syshal_rtc_return_timestamp(),
-                                                                       0,
-                                                                       0,
-                                                                       sm_context.gps_counters.last_loc_lat,
-                                                                       sm_context.gps_counters.last_loc_lon,
-                                                                       sm_context.gps_counters.time_last_update);
+                        asset_status_packet_t asset_status_packet;
+
+                        asset_status_packet.up_time_ms = sm_context.asset_counters.up_time_ms;
+                        asset_status_packet.sys_time = syshal_rtc_return_timestamp();
+
+                        syshal_ble_command.send_asset_status_packet(&asset_status_packet);
                         ble_write_req();
                         break;
                     }
                     case packet_id_clear_msg_data:
                         DEBUG_PR_TRACE("Clear all messages in logger.");
-                        syshal_ble_command.send_clear_msg_data_packet();
-                        ble_write_req();
                         logger_clear_all_slots_matching_tag(LOGGER_TAG_U_MSG_SLOT);
                         break;
                     case packet_id_update_loc_data:
                         DEBUG_PR_TRACE("Trig sensors measurement.");
-                        syshal_ble_command.send_update_loc_data_packet();
-                        ble_write_req();
                         syshal_gps_wake_up();
                         break;
                     case packet_id_cmd_data:
                     {
                         DEBUG_PR_TRACE("Get all user CMDs from logger.");
-                        LOG_U_CMD_struct log_u_cmd;
                         uint32_t prv_slot_epoch = 0xFFFFFFFF;
                         for (uint16_t i = 0; i < LOGGER_NB_SLOTS; i++)
                         {
+                            cmd_data_packet_t cmd_data_packet;
                             uint16_t slot_id = 0, slot_size = 0;
                             uint32_t slot_createdDate = 0, slot_acknowledgedDate = 0;
                             uint8_t slot_tag;
@@ -522,8 +657,9 @@ void syshal_ble_callback(syshal_ble_event_t *event)
                                 if (slot_tag == LOGGER_TAG_U_CMD_SLOT)
                                 {
                                     logger_get_data(slot_id, &slot_buffer, &slot_size, &slot_tag, &slot_createdDate, &slot_acknowledgedDate, &status);
-                                    memcpy(&log_u_cmd, slot_buffer, slot_size);
-                                    syshal_ble_command.send_msg_data_packet(log_u_cmd.data, slot_createdDate);
+                                    cmd_data_packet.createdDate = slot_createdDate;
+                                    memcpy(cmd_data_packet.data, slot_buffer, slot_size);
+                                    syshal_ble_command.send_cmd_data_packet(&cmd_data_packet);
                                     ble_write_req();
                                 }
                             }
@@ -534,10 +670,10 @@ void syshal_ble_callback(syshal_ble_event_t *event)
                     case packet_id_msg_data:
                     {
                         DEBUG_PR_TRACE("Get all user MSGs from logger.");
-                        LOG_U_MSG_struct log_u_msg;
                         uint32_t prv_slot_epoch = 0xFFFFFFFF;
                         for (uint16_t i = 0; i < LOGGER_NB_SLOTS; i++)
                         {
+                            msg_data_packet_t msg_data_packet;
                             uint16_t slot_id = 0, slot_size = 0;
                             uint32_t slot_createdDate = 0, slot_acknowledgedDate = 0;
                             uint8_t slot_tag;
@@ -550,8 +686,9 @@ void syshal_ble_callback(syshal_ble_event_t *event)
                                 if (slot_tag == LOGGER_TAG_U_MSG_SLOT)
                                 {
                                     logger_get_data(slot_id, &slot_buffer, &slot_size, &slot_tag, &slot_createdDate, &slot_acknowledgedDate, &status);
-                                    memcpy(&log_u_msg, slot_buffer, slot_size);
-                                    syshal_ble_command.send_msg_data_packet(log_u_msg.data, slot_acknowledgedDate);
+                                    msg_data_packet.acknowledgedDate = slot_acknowledgedDate;
+                                    memcpy(msg_data_packet.data, slot_buffer, slot_size);
+                                    syshal_ble_command.send_msg_data_packet(&msg_data_packet);
                                     ble_write_req();
                                 }
                             }
@@ -579,6 +716,69 @@ void syshal_ble_callback(syshal_ble_event_t *event)
         DEBUG_PR_WARN("Unknown BLE event in %s() : %d", __FUNCTION__, event->id);
         break;
     }
+
+#if defined(NRF52_SERIES)
+    resumeLoop();
+#endif
+}
+
+void syshal_screen_callback(syshal_screen_event_t *event)
+{
+    DEBUG_PR_TRACE("%s() called", __FUNCTION__);
+
+    switch (event->id)
+    {
+    case SYSHAL_SCREEN_EVENT_DISPLAY_ON:
+        DEBUG_PR_TRACE("Power display ON.");
+        screen_finish_time = syshal_time_get_ticks_ms() + SCREEN_DURATION_MS;
+        break;
+    case SYSHAL_SCREEN_EVENT_DISPLAY_OFF:
+        DEBUG_PR_TRACE("Power display OFF.");
+        break;
+    case SYSHAL_SCREEN_EVENT_BUTTON_PRESSED:
+        DEBUG_PR_TRACE("User button pressed.");
+        screen_finish_time = syshal_time_get_ticks_ms() + SCREEN_DURATION_MS;
+        request_screen_display_activation = true;
+        break;
+    case SYSHAL_SCREEN_EVENT_SHUTDOWN:
+        DEBUG_PR_TRACE("Request for shutdown.");
+        break;
+    case SYSHAL_SCREEN_EVENT_PRESET_MSG:
+    {
+        DEBUG_PR_TRACE("Enqueue preset message data.");
+        LOG_U_MSG_struct log_u_msg;
+        uint16_t slot_id = 0;
+        memcpy(log_u_msg.data, event->preset_msg.buffer, sizeof(event->preset_msg.buffer_size));
+        logger_insert_data(&log_u_msg, sizeof(LOG_U_MSG_struct), LOGGER_TAG_U_MSG_SLOT,
+                           event->preset_msg.timestamp, &slot_id);
+        sm_context.logger_counters.u_msg_cnt++;
+        logger_new_data_available = true;
+        break;
+    }
+    case SYSHAL_SCREEN_EVENT_CLEAR_ALL_USER_MSG:
+        DEBUG_PR_TRACE("Clear all messages in logger.");
+        logger_clear_all_slots_matching_tag(LOGGER_TAG_U_MSG_SLOT);
+        break;
+    case SYSHAL_SCREEN_EVENT_UPDATE_GEOLOC:
+        DEBUG_PR_TRACE("Trig sensors measurement.");
+        syshal_gps_wake_up();
+        break;
+    case SYSHAL_SCREEN_EVENT_UPDATE_STATUS_REQUEST:
+        DEBUG_PR_TRACE("Update status request.");
+        syshal_screen_status_t screen_status;
+        screen_status.last_loc_lat = sm_context.gps_counters.last_loc_lat;
+        screen_status.last_loc_lon = sm_context.gps_counters.last_loc_lon;
+        screen_status.u_msg_cnt = sm_context.logger_counters.u_msg_cnt;
+        screen_status.u_cmd_cnt = sm_context.logger_counters.u_cmd_cnt;
+        screen_status.pvt_cnt = sm_context.logger_counters.pvt_cnt;
+        syshal_temp_temperature(&(screen_status.temp));
+        syshal_batt_voltage(&(screen_status.v_bat));
+        syshal_screen_set_status(screen_status);
+        break;
+    default:
+        DEBUG_PR_WARN("Unknown SCREEN event in %s() : %d", __FUNCTION__, event->id);
+        break;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -591,6 +791,8 @@ static void sm_main_boot(sm_handle_t *state_handle)
 
     Try
     {
+        uint32_t state_start_time = syshal_time_get_ticks_ms();
+
         if (debug_init())
             Throw(EXCEPTION_BOOT_ERROR);
 
@@ -603,6 +805,12 @@ static void sm_main_boot(sm_handle_t *state_handle)
             Throw(EXCEPTION_BOOT_ERROR);
 
         Wire.begin(); // Init I2C port
+
+        // Start the soft watchdog timer
+        if (syshal_rtc_soft_watchdog_set(SOFT_WATCHDOG_TIMEOUT_S))
+            Throw(EXCEPTION_BOOT_ERROR);
+        syshal_rtc_soft_watchdog_enable();
+        syshal_rtc_set_timestamp(RTC_DEFAULT_TIMESTAMP_S);
 
         /*
         // Init timers
@@ -642,17 +850,17 @@ static void sm_main_boot(sm_handle_t *state_handle)
             Throw(EXCEPTION_BOOT_ERROR);
         syshal_ble_command.begin(ble_stream, true); // Loopback data stream to command module
 
+        if (syshal_screen_init())
+            Throw(EXCEPTION_BOOT_ERROR);
+
+        if (syshal_flash_init())
+            Throw(EXCEPTION_BOOT_ERROR);
+
         if (logger_init())
             Throw(EXCEPTION_BOOT_ERROR);
 
         if (scheduler_init())
             Throw(EXCEPTION_BOOT_ERROR);
-
-        // Start the soft watchdog timer
-        // if (syshal_rtc_soft_watchdog_set(SOFT_WATCHDOG_TIMEOUT_S))
-        //     Throw(EXCEPTION_BOOT_ERROR);
-        // syshal_rtc_soft_watchdog_enable();
-        syshal_rtc_set_timestamp(RTC_DEFAULT_TIMESTAMP_S);
 
         // Load tracker configuration (TODO: load from file system)
         sys_config.ble_settings.contents.tx_power = 0;
@@ -666,8 +874,15 @@ static void sm_main_boot(sm_handle_t *state_handle)
         sys_config.gps_settings.contents.with_beidou = true;
         sys_config.gps_settings.contents.with_glonass = true;
         sys_config.gps_settings.contents.with_rxm_meas20 = true;
+        sys_config.gps_settings.contents.nav_freq_hz = 1;
+        sys_config.gps_settings.contents.hacc_pvt_threshold = 10000;
         sys_config.gps_settings.contents.raw_timeout_s = 10;
+        sys_config.gps_settings.contents.pvt_timeout_s = 120;
         sys_config.gps_settings.hdr.set = true;
+
+        sys_config.screen_settings.contents.lcd_contrast = 50;
+        sys_config.screen_settings.contents.page_conf_duration_ms = 500;
+        sys_config.screen_settings.hdr.set = true;
 
         sys_config.sat_settings.contents.with_pld_ack = true;
         sys_config.sat_settings.contents.with_geo_loc = false;
@@ -679,12 +894,26 @@ static void sm_main_boot(sm_handle_t *state_handle)
         sys_config.sat_settings.contents.with_tx_pend_event_pin_en = false;
         sys_config.sat_settings.contents.sat_search_rate = 0;
         sys_config.sat_settings.contents.sat_force_search = false;
-        // sys_config.sat_settings.contents.bulletin_data[8]; // Satellite keplerian orbital information
         sys_config.sat_settings.hdr.set = true;
 
-        sys_config.scheduler_settings.contents.gps_interval_h = 3;
-        sys_config.scheduler_settings.contents.gps_timeout_s = 120;
-        sys_config.scheduler_settings.hdr.set = true;
+        sys_config.gps_scheduler_settings.contents.interval_h = 24;
+        sys_config.gps_scheduler_settings.hdr.set = true;
+
+        sys_config.satpass_scheduler_settings.contents.timestamp = 0; // Will be in the past, scheduler will disgard it immediately
+        sys_config.satpass_scheduler_settings.hdr.set = true;
+
+        sys_config.satpass_predictor_enable.contents.enable = false;
+        sys_config.satpass_predictor_enable.hdr.set = false;
+
+        sys_config.satpass_settings.contents.lat = 46.5; // Only static stations supported now
+        sys_config.satpass_settings.contents.lon = 6.5;  // Only static stations supported now
+        sys_config.satpass_settings.contents.sat_pass_search_window_size_s = 86400;
+        sys_config.satpass_settings.contents.sat_pass_search_step_s = 30;
+        sys_config.satpass_settings.contents.sat_pass_search_window_back_step_s = 600;
+        sys_config.satpass_settings.contents.sat_pass_terminal_wakeup_margin_s = 1200;
+        sys_config.satpass_settings.contents.sat_pass_min_elevation_d = 30;
+        sys_config.satpass_settings.contents.sat_pass_predictor_timeout_s = 86400;
+        sys_config.satpass_settings.hdr.set = true;
 
         sys_config.battery_low_threshold.contents.threshold = 0;
         sys_config.battery_low_threshold.hdr.set = false;
@@ -711,6 +940,7 @@ static void sm_main_boot(sm_handle_t *state_handle)
         if (sm_is_last_entry(state_handle))
         {
             syshal_led_off();
+            sm_context.asset_counters.up_time_ms += syshal_time_get_ticks_ms() - state_start_time;
         }
     }
     Catch(e)
@@ -728,6 +958,8 @@ static void sm_main_provisioning(sm_handle_t *state_handle)
     Try
     {
         KICK_WATCHDOG();
+
+        uint32_t state_start_time = syshal_time_get_ticks_ms();
 
         if (sm_is_first_entry(state_handle))
         {
@@ -774,9 +1006,20 @@ static void sm_main_provisioning(sm_handle_t *state_handle)
             if (syshal_ble_update_config(ble_config))
                 Throw(EXCEPTION_BLE_ERROR);
 
-            // Configure scheduler
-            scheduler_config_t scheduler_config = {.scheduler = &sys_config.scheduler_settings};
-            if (scheduler_update_config(scheduler_config))
+            // Configure SCREEN
+            syshal_screen_config_t screen_config = {.screen = &sys_config.screen_settings};
+            if (syshal_screen_update_config(screen_config))
+                Throw(EXCEPTION_SCREEN_ERROR);
+
+            // Configure GPS scheduler
+            scheduler_gps_config_t scheduler_gps_config = {.scheduler = &sys_config.gps_scheduler_settings};
+            if (scheduler_gps_update_config(scheduler_gps_config))
+                Throw(EXCEPTION_SCHEDULER_ERROR);
+            scheduler_tick();
+
+            // Configure SATPASS scheduler
+            scheduler_satpass_config_t scheduler_satpass_config = {.scheduler = &sys_config.satpass_scheduler_settings};
+            if (scheduler_satpass_update_config(scheduler_satpass_config))
                 Throw(EXCEPTION_SCHEDULER_ERROR);
             scheduler_tick();
         }
@@ -798,6 +1041,7 @@ static void sm_main_provisioning(sm_handle_t *state_handle)
         {
             new_config_available = false;
             syshal_led_off();
+            sm_context.asset_counters.up_time_ms += syshal_time_get_ticks_ms() - state_start_time;
         }
     }
     Catch(e)
@@ -815,6 +1059,8 @@ static void sm_main_operational(sm_handle_t *state_handle)
     Try
     {
         KICK_WATCHDOG();
+
+        uint32_t state_start_time = syshal_time_get_ticks_ms();
 
         if (sm_is_first_entry(state_handle))
         {
@@ -838,8 +1084,27 @@ static void sm_main_operational(sm_handle_t *state_handle)
             }
             else
             {
+                // scheduler_gps_stop();
                 syshal_gps_shutdown();
             }
+
+            // If satpass predictor enabled
+            if ((sys_config.satpass_predictor_enable.hdr.set &&
+                 sys_config.satpass_predictor_enable.contents.enable))
+            {
+                scheduler_satpass_start();
+            }
+            else
+            {
+                scheduler_satpass_stop();
+            }
+        }
+
+        // Indicate that we are running an opeartion
+        if (!syshal_led_is_active())
+        {
+            syshal_led_set_solid(SYSHAL_LED_COLOUR_GREEN);
+            syshal_led_tick();
         }
 
         // Get the battery level state
@@ -861,12 +1126,6 @@ static void sm_main_operational(sm_handle_t *state_handle)
         if ((sys_config.gps_log_position_enable.hdr.set &&
              sys_config.gps_log_position_enable.contents.enable))
         {
-            if (!syshal_led_is_active())
-            {
-                syshal_led_set_solid(SYSHAL_LED_COLOUR_GREEN);
-                syshal_led_tick();
-            }
-
             syshal_gps_tick();
 
             // If we have a raw sample aquired
@@ -881,8 +1140,47 @@ static void sm_main_operational(sm_handle_t *state_handle)
                 syshal_gps_shutdown();
 
             // If we have a timeout
-            if ((syshal_rtc_return_uptime() - gps_start_time) > sys_config.scheduler_settings.contents.gps_timeout_s)
+            if ((syshal_rtc_return_uptime() - gps_start_time) > sys_config.gps_settings.contents.pvt_timeout_s)
                 syshal_gps_shutdown();
+        }
+
+        syshal_sat_tick();
+        syshal_screen_tick();
+        syshal_screen_tick(); // TODO: should only be called once
+        scheduler_tick();
+
+        // Request satellite module counters
+        if (request_sat_status_update)
+        {
+            if (!syshal_sat_wake_up())
+            {
+                syshal_sat_read_status(&sm_context.sat_counters.status);
+            }
+            syshal_sat_shutdown();
+            request_sat_status_update = false;
+        }
+
+        // Fallback strategy for satellite pass predictor
+        if ((sys_config.satpass_predictor_enable.hdr.set) &&
+            (sys_config.satpass_predictor_enable.contents.enable) &&
+            ((syshal_rtc_return_timestamp() - sm_context.sat_counters.status.time_start_last_contact) > sys_config.satpass_settings.contents.sat_pass_predictor_timeout_s))
+        {
+            sys_config.satpass_predictor_enable.contents.enable = false;
+            DEBUG_PR_WARN("Satellite pass predictor deactivated. Reason = timeout.");
+        }
+
+        // Push logger data in satellite module
+        if (logger_new_data_available)
+        {
+            logger_push_slots_to_sat();
+            logger_new_data_available = false;
+        }
+
+        // Activate display if requested
+        if (request_screen_display_activation)
+        {
+            syshal_screen_wake_up();
+            request_screen_display_activation = false;
         }
 
         // Turn off led after led_finish_time
@@ -897,20 +1195,30 @@ static void sm_main_operational(sm_handle_t *state_handle)
             }
         }
 
-        syshal_sat_tick();
-        scheduler_tick();
+        // Turn off screen after screen_finish_time
+        if (syshal_screen_get_state() == SYSHAL_SCREEN_STATE_DISPLAYING)
+        {
+            uint32_t current_time = syshal_time_get_ticks_ms();
+
+            // If there a no finish time or the current time is less than the finish time
+            if (screen_finish_time != 0 && current_time > screen_finish_time)
+            {
+                syshal_screen_shutdown();
+            }
+        }
+
         syshal_led_tick();
 
-        if (logger_new_data_available)
-        {
-            logger_push_slots_to_sat();
-            logger_new_data_available = false;
-        }
+        // Update asset counters
+        sm_context.asset_counters.up_time_ms += syshal_time_get_ticks_ms() - state_start_time;
+        state_start_time = syshal_time_get_ticks_ms(); // Reset counter
 
         // Go to sleep
         if (!syshal_led_is_active())
         {
-            if (syshal_gps_get_state() == SYSHAL_GPS_STATE_ASLEEP)
+            if ((syshal_gps_get_state() == SYSHAL_GPS_STATE_ASLEEP) &&
+                ((syshal_screen_get_state() == SYSHAL_SCREEN_STATE_ASLEEP) ||
+                 (syshal_screen_get_state() == SYSHAL_SCREEN_STATE_UNINIT)))
             {
                 uint32_t timestamp_next_alarm = 0;
                 scheduler_get_timestamp_next_alarm(&timestamp_next_alarm);
@@ -938,8 +1246,9 @@ static void sm_main_operational(sm_handle_t *state_handle)
         // Are we about to leave this state?
         if (sm_is_last_entry(state_handle))
         {
-            // Sleep the GPS to save power
             scheduler_gps_stop();
+            scheduler_satpass_stop();
+
             if (syshal_gps_get_state() != SYSHAL_GPS_STATE_ASLEEP)
                 syshal_gps_shutdown();
 
@@ -949,6 +1258,8 @@ static void sm_main_operational(sm_handle_t *state_handle)
             syshal_led_off();
 
             sensor_logging_enabled = false;
+
+            sm_context.asset_counters.up_time_ms += syshal_time_get_ticks_ms() - state_start_time;
         }
     }
     Catch(e)
@@ -966,6 +1277,8 @@ static void sm_main_deactivate(sm_handle_t *state_handle)
     Try
     {
         KICK_WATCHDOG();
+
+        uint32_t state_start_time = syshal_time_get_ticks_ms();
 
         uint32_t state_entry_time = 0;
 
@@ -994,6 +1307,7 @@ static void sm_main_deactivate(sm_handle_t *state_handle)
         if (sm_is_last_entry(state_handle))
         {
             syshal_led_off();
+            sm_context.asset_counters.up_time_ms += syshal_time_get_ticks_ms() - state_start_time;
         }
     }
     Catch(e)
@@ -1012,6 +1326,8 @@ static void sm_main_battery_level_low(sm_handle_t *state_handle)
     {
         KICK_WATCHDOG();
 
+        uint32_t state_start_time = syshal_time_get_ticks_ms();
+
         if (sm_is_first_entry(state_handle))
         {
             DEBUG_PR_INFO("Entered state %s from %s",
@@ -1024,6 +1340,7 @@ static void sm_main_battery_level_low(sm_handle_t *state_handle)
         if (sm_is_last_entry(state_handle))
         {
             // WILL NEVER ESCAPE THIS MODE UNLESS ...
+            sm_context.asset_counters.up_time_ms += syshal_time_get_ticks_ms() - state_start_time;
         }
     }
     Catch(e)
@@ -1042,6 +1359,8 @@ static void sm_main_log_file_full(sm_handle_t *state_handle)
     {
         KICK_WATCHDOG();
 
+        uint32_t state_start_time = syshal_time_get_ticks_ms();
+
         if (sm_is_first_entry(state_handle))
         {
             DEBUG_PR_INFO("Entered state %s from %s",
@@ -1054,6 +1373,7 @@ static void sm_main_log_file_full(sm_handle_t *state_handle)
         if (sm_is_last_entry(state_handle))
         {
             // WILL NEVER ESCAPE THIS MODE UNLESS ...
+            sm_context.asset_counters.up_time_ms += syshal_time_get_ticks_ms() - state_start_time;
         }
     }
     Catch(e)
@@ -1134,7 +1454,7 @@ void ble_write_req(void)
 
 void logger_push_slots_to_sat(void)
 {
-    DEBUG_PR_TRACE("Pushing slot to sat. %s()", __FUNCTION__);
+    DEBUG_PR_TRACE("Waking up terminal. %s()", __FUNCTION__);
 
     if (!syshal_sat_wake_up())
     {
@@ -1192,11 +1512,18 @@ void logger_push_slots_to_sat(void)
         }
 
         // Update satellite context
-        syshal_sat_read_status(&(sm_context.sat_counters.status));
+        request_sat_status_update = true;
     }
 
     syshal_sat_shutdown();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////// COMMANDS ///////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////// MESSAGE STATE EXECUTION CODE ////////////////////////

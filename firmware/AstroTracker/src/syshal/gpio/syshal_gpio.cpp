@@ -70,7 +70,9 @@ void syshal_gpio_term(uint32_t pin)
 int syshal_gpio_enable_interrupt(uint32_t pin, voidFuncPtr callback, irq_mode mode)
 {
 #if defined(NRF52_SERIES)
-    // Empty
+    nrf_gpio_cfg_sense_input(g_ADigitalPinMap[pin], NRF_GPIO_PIN_PULLUP, NRF_GPIO_PIN_SENSE_LOW);
+    nrf_gpio_pin_latch_clear(g_ADigitalPinMap[pin]);
+    attachInterrupt(digitalPinToInterrupt(pin), callback, mode);
 #elif defined(ARDUINO_ARCH_SAMD)
     EExt_Interrupts in = g_APinDescription[pin].ulExtInt;
     if (in == NOT_AN_INTERRUPT || in == EXTERNAL_INT_NMI)

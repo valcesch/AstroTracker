@@ -28,7 +28,7 @@
 #include "../../core/debug/debug.h"
 #include "../syshal_config.h"
 
-#ifdef NRF52_SERIES
+#if defined(NRF52_SERIES) && defined(WITH_BLE)
 #include <bluefruit.h>
 BLEDis bledis;   // device information
 BLEUart bleuart; // uart over ble
@@ -47,7 +47,7 @@ void syshal_ble_rx_callback_priv(uint16_t conn_handle);
 
 int syshal_ble_init(void)
 {
-#ifdef NRF52_SERIES
+#if defined(NRF52_SERIES) && defined(WITH_BLE)
     // Initialize bletooth
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_NORMAL);
@@ -79,7 +79,7 @@ int syshal_ble_update_config(syshal_ble_config_t ble_config)
 
     if (config.ble->hdr.set)
     {
-#ifdef NRF52_SERIES
+#if defined(NRF52_SERIES) && defined(WITH_BLE)
         DEBUG_PR_TRACE("Set Tx power. %s()", __FUNCTION__);
         Bluefruit.setTxPower(config.ble->contents.tx_power);
 
@@ -115,7 +115,7 @@ int syshal_ble_term(void)
 
 int syshal_ble_send_message(uint8_t *buffer, size_t buffer_size)
 {
-#ifdef NRF52_SERIES
+#if defined(NRF52_SERIES) && defined(WITH_BLE)
     // BLE packets cannot be more than 20 bytes, need to be splitted
     uint8_t buf_size = buffer_size;
     uint8_t buf_idx = 0;
@@ -150,7 +150,7 @@ void syshal_ble_rx_callback_priv(uint16_t conn_handle)
 
     event.cmd_received.buffer_size = 0;
 
-#ifdef NRF52_SERIES
+#if defined(NRF52_SERIES) && defined(WITH_BLE)
     while (bleuart.available())
     {
         event.cmd_received.buffer[event.cmd_received.buffer_size++] = bleuart.read();
@@ -168,7 +168,7 @@ void syshal_ble_startAdv_priv(void)
 {
     DEBUG_PR_TRACE("Start advertising. %s()", __FUNCTION__);
 
-#ifdef NRF52_SERIES
+#if defined(NRF52_SERIES) && defined(WITH_BLE)
     // Advertising packet
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
     Bluefruit.Advertising.addTxPower();
@@ -192,7 +192,7 @@ void syshal_ble_connect_callback_priv(uint16_t conn_handle)
 {
     DEBUG_PR_TRACE("Connecting... %s()", __FUNCTION__);
 
-#ifdef NRF52_SERIES
+#if defined(NRF52_SERIES) && defined(WITH_BLE)
     // Get the reference to current connection
     BLEConnection *connection = Bluefruit.Connection(conn_handle);
 
@@ -216,7 +216,7 @@ void syshal_ble_disconnect_callback_priv(uint16_t conn_handle, uint8_t reason)
 
     DEBUG_PR_TRACE("Disconnected, reason = 0x%x. %s()", reason, __FUNCTION__);
 
-#ifdef NRF52_SERIES
+#if defined(NRF52_SERIES) && defined(WITH_BLE)
     // Empty
 #else
     DEBUG_PR_ERROR("No supported radio. %s()", __FUNCTION__);

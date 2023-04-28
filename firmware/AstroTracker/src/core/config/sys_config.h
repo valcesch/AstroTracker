@@ -69,8 +69,16 @@ enum
     // SAT
     SYS_CONFIG_TAG_SAT_SETTINGS,
 
+    // SATPASS
+    SYS_CONFIG_TAG_SATPASS_SETTINGS,
+    SYS_CONFIG_TAG_SATPASS_PREDICTOR_ENABLE,
+
+    // SCREEN
+    SYS_CONFIG_TAG_SCREEN_SETTINGS,
+
     // SCHEDULER
-    SYS_CONFIG_TAG_SCHEDULER_SETTINGS,
+    SYS_CONFIG_TAG_SCHEDULER_GPS_SETTINGS,
+    SYS_CONFIG_TAG_SCHEDULER_SATPASS_SETTINGS,
 
     // BATTERY
     SYS_CONFIG_TAG_BATTERY_LOG_ENABLE = 0x0900, // The battery charge state shall be enabled for logging.
@@ -115,9 +123,22 @@ typedef struct __attribute__((__packed__))
         bool with_beidou;
         bool with_glonass;
         bool with_rxm_meas20;
-        uint16_t raw_timeout_s;
+        int32_t hacc_pvt_threshold;
+        uint8_t raw_timeout_s;
+        uint8_t pvt_timeout_s;
+        uint8_t nav_freq_hz; 
     } contents;
 } sys_config_gps_settings_t;
+
+typedef struct __attribute__((__packed__))
+{
+    sys_config_hdr_t hdr;
+    struct __attribute__((__packed__))
+    {
+        uint8_t lcd_contrast;
+        int16_t page_conf_duration_ms;
+    } contents;
+} sys_config_screen_settings_t;
 
 typedef struct __attribute__((__packed__))
 {
@@ -132,8 +153,8 @@ typedef struct __attribute__((__packed__))
         bool with_msg_reset_pin_en;
         bool with_cmd_event_pin_en;
         bool with_tx_pend_event_pin_en;
-        uint8_t sat_search_rate;
         bool sat_force_search;
+        uint8_t sat_search_rate;
     } contents;
 } sys_config_sat_settings_t;
 
@@ -142,10 +163,34 @@ typedef struct __attribute__((__packed__))
     sys_config_hdr_t hdr;
     struct __attribute__((__packed__))
     {
-        uint8_t gps_interval_h;
-        uint8_t gps_timeout_s;
+        uint8_t interval_h;
     } contents;
-} sys_config_scheduler_settings_t;
+} sys_config_gps_scheduler_settings_t;
+
+typedef struct __attribute__((__packed__))
+{
+    sys_config_hdr_t hdr;
+    struct __attribute__((__packed__))
+    {
+        uint32_t timestamp;
+    } contents;
+} sys_config_satpass_scheduler_settings_t;
+
+typedef struct __attribute__((__packed__))
+{
+    sys_config_hdr_t hdr;
+    struct __attribute__((__packed__))
+    {
+        uint32_t sat_pass_predictor_timeout_s;       // Timeout to stop using predictor
+        uint32_t sat_pass_search_window_size_s;      // Prediction window size
+        uint16_t sat_pass_search_step_s;             // simulation interval
+        uint16_t sat_pass_search_window_back_step_s; // Step back when detecting observation window
+        uint16_t sat_pass_terminal_wakeup_margin_s;  // 1/2 sat pass window size
+        uint8_t sat_pass_min_elevation_d;            // Minimum satellite elevation
+        int32_t lon;                                 // Terminal location for simulation
+        int32_t lat;                                 // Terminal location for simulation
+    } contents;
+} sys_config_satpass_settings_t;
 
 typedef struct __attribute__((__packed__))
 {
@@ -172,6 +217,15 @@ typedef struct __attribute__((__packed__))
     {
         uint8_t enable;
     } contents;
+} sys_config_satpass_predictor_enable_t;
+
+typedef struct __attribute__((__packed__))
+{
+    sys_config_hdr_t hdr;
+    struct __attribute__((__packed__))
+    {
+        uint8_t enable;
+    } contents;
 } sys_config_logging_enable_t;
 
 typedef struct
@@ -181,9 +235,13 @@ typedef struct
     sys_config_ble_settings_t ble_settings;
     sys_config_gps_settings_t gps_settings;
     sys_config_sat_settings_t sat_settings;
-    sys_config_scheduler_settings_t scheduler_settings;
+    sys_config_screen_settings_t screen_settings;
+    sys_config_gps_scheduler_settings_t gps_scheduler_settings;
+    sys_config_satpass_scheduler_settings_t satpass_scheduler_settings;
+    sys_config_satpass_settings_t satpass_settings;
     sys_config_battery_low_threshold_t battery_low_threshold;
     sys_config_gps_log_position_enable_t gps_log_position_enable;
+    sys_config_satpass_predictor_enable_t satpass_predictor_enable;
     sys_config_logging_enable_t logging_enable;
 } sys_config_t;
 

@@ -52,19 +52,11 @@
 #define SYSHAL_SAT_BUFFER_FULL (-14)
 #define SYSHAL_SAT_ERROR_READ_HK (-15)
 #define SYSHAL_SAT_ERROR_BUSY (-16)
-#define SYSHAL_SAT_ERROR_TIMEOUT (-17)
 #define SYSHAL_SAT_ERROR_DEVICE (-18)
 #define SYSHAL_SAT_ERROR_INVALID_STATE (-19)
 #define SYHSAL_SAT_ERROR_CLEAR_PERF_COUNTER (-20)
 
 #define SYSHAL_SAT_BAUDRATE 9600
-
-typedef enum
-{
-    SYSHAL_SAT_PWR_MODE_NONE,
-    SYSHAL_SAT_PWR_MODE_ASTROCAST_EPHEMERIDES,
-    SYSHAL_SAT_PWR_MODE_SAT_PASS_PREDICT,
-} syshal_sat_pwr_mode_t;
 
 typedef enum
 {
@@ -77,7 +69,7 @@ typedef enum
     SYSHAL_SAT_EVENT_POWERED_OFF
 } syshal_sat_event_id_t;
 
-typedef struct
+typedef struct __attribute__((__packed__))
 {
     uint32_t sat_detect_operation_cnt = 0;
     uint32_t signal_demod_attempt_cnt = 0;
@@ -92,13 +84,13 @@ typedef struct
     uint32_t uptime = 0;
 } syshal_sat_status_t;
 
-typedef struct
+typedef struct __attribute__((__packed__))
 {
     uint32_t timestamp; // The timestamp of this reading
     uint16_t msg_id;
 } syshal_sat_event_msg_acknowledged_t;
 
-typedef struct
+typedef struct __attribute__((__packed__))
 {
     uint8_t buffer_size;
     uint8_t buffer[40];
@@ -106,7 +98,7 @@ typedef struct
     uint32_t timestamp;
 } syshal_sat_event_cmd_received_t;
 
-typedef struct
+typedef struct __attribute__((__packed__))
 {
     syshal_sat_event_id_t id;
     syshal_sat_event_msg_acknowledged_t msg_acknowledged;
@@ -135,11 +127,7 @@ int syshal_sat_set_geolocation(int32_t lat,
 int syshal_sat_send_message(uint8_t *buffer,
                             size_t buffer_size,
                             uint16_t buffer_id);
-int syshal_sat_get_next_contact_oportuinty(uint32_t *delay,
-                                           syshal_sat_pwr_mode_t mode,
-                                           uint32_t t_now,
-                                           int32_t latitude,
-                                           int32_t longitude);
+int syshal_sat_get_next_contact_oportuinty(uint32_t *delay);
 int syshal_sat_read_status(syshal_sat_status_t *status);
 syshal_sat_state_t syshal_sat_get_state(void);
 int syshal_sat_tick(void);

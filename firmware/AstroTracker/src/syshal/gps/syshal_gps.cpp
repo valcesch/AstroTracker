@@ -26,9 +26,9 @@
 #include "../syshal_gpio.h"
 #include "../syshal_gps.h"
 #include "../syshal_time.h"
-#include "../syshal_config.h"
 #include "../../core/debug/debug.h"
 #include "SparkFun_u-blox_GNSS_Arduino_Library.h"
+#include "../syshal_config.h"
 
 SFE_UBLOX_GNSS myGNSS;
 
@@ -38,7 +38,9 @@ static syshal_gps_state_t state = SYSHAL_GPS_STATE_UNINIT;
 static volatile bool new_data_pending = false;
 
 #define SYSHAL_GPS_GPIO_POWER_ON (GPIO_GPS_EN)
+#ifdef GPIO_GPS_EXT_INT
 #define SYSHAL_GPS_GPIO_INT (GPIO_GPS_EXT_INT)
+#endif
 
 #define GPS_NO_FIX 0
 #define GPS_DEAD_RECK_ONLY 1
@@ -67,7 +69,9 @@ int syshal_gps_init(void)
 
     // Configure GPIOs
     syshal_gpio_init(SYSHAL_GPS_GPIO_POWER_ON, OUTPUT);
+#ifdef SYSHAL_GPS_GPIO_INT
     syshal_gpio_init(SYSHAL_GPS_GPIO_INT, INPUT_PULLDOWN);
+#endif
     // syshal_gpio_enable_interrupt(SYSHAL_GPS_GPIO_INT, syshal_gps_int1_pin_interrupt_priv);
 
     // Try establish connection
@@ -78,6 +82,10 @@ int syshal_gps_init(void)
         syshal_gps_shutdown();
         return SYSHAL_GPS_ERROR_TIMEOUT;
     }
+
+    // myGNSS.enableDebugging();
+    myGNSS.setI2COutput(COM_TYPE_UBX);
+    myGNSS.saveConfiguration();
 
     syshal_gps_shutdown();
 
@@ -115,6 +123,12 @@ int syhsal_gps_update_config(syshal_gps_config_t gps_config)
             myGNSS.enableMessage(UBX_CLASS_RXM, UBX_RXM_MEAS20, COM_PORT_I2C);
         else
             myGNSS.disableMessage(UBX_CLASS_RXM, UBX_RXM_MEAS20, COM_PORT_I2C);
+
+        // Set acquisition rate
+        myGNSS.setNavigationFrequency(config.gps->contents.nav_freq_hz);
+        
+        // Save configuration
+        myGNSS.saveConfiguration();
     }
 
     return SYSHAL_GPS_NO_ERROR;
@@ -198,25 +212,30 @@ int syshal_gps_tick(void)
     }
     */
 
-    uint8_t meas20[20];
-    if (myGNSS.getRXMMEAS20(meas20))
+    // RAW event
+    if (config.gps->contents.with_rxm_meas20)
     {
-        myGNSS.flushRXMMEAS20();
+        uint8_t meas20[20];
+        if (myGNSS.getRXMMEAS20(meas20))
+        {
+            myGNSS.flushRXMMEAS20();
 
-        event.id = SYSHAL_GPS_EVENT_RAW;
+            event.id = SYSHAL_GPS_EVENT_RAW;
 
-        memcpy(event.raw.meas20, meas20, 20);
-        event.raw.timestamp = syshal_rtc_return_timestamp();
+            memcpy(event.raw.meas20, meas20, 20);
+            event.raw.timestamp = syshal_rtc_return_timestamp();
 
-        DEBUG_PR_TRACE("Got RAW message. %s()", __FUNCTION__);
+            DEBUG_PR_TRACE("Got RAW message. %s()", __FUNCTION__);
 
-        state = SYSHAL_GPS_STATE_FIXED_RAW; // Before tick()
+            state = SYSHAL_GPS_STATE_FIXED_RAW; // Before tick()
 
-        syshal_gps_callback(&event);
+            syshal_gps_callback(&event);
+        }
     }
 
     // PVT event
-    if (myGNSS.getFixType() == GPS_FIX_3D)
+    if ((myGNSS.getFixType() == GPS_FIX_3D) &&
+        (myGNSS.getHorizontalAccEst() < config.gps->contents.hacc_pvt_threshold))
     {
         event.id = SYSHAL_GPS_EVENT_PVT;
 

@@ -50,60 +50,34 @@ public:
     uint8_t request_is_available();
     uint8_t an_packet_receive_id(uint8_t *an_packet_id);
 
-    // send - TODO
     uint8_t receive_request_packet(uint8_t *id);
 
-    void send_msg_data_packet(uint8_t data[40],
-                              uint32_t acknowledgedDate);
-    uint8_t receive_msg_data_packet(uint8_t data[40]);
+    void send_msg_data_packet(msg_data_packet_t *msg_data_packet);
+    uint8_t receive_msg_data_packet(msg_data_packet_t *msg_data_packet);
 
-    void send_config_packet(uint8_t scheduler_log_data_rate,
-                            uint8_t scheduler_gnss_pvt_retry_rate,
-                            uint8_t scheduler_gnss_raw_retry_rate,
-                            uint8_t scheduler_keep_alive_rate,
-                            uint8_t scheduler_gnss_pvt_retry_count,
-                            uint8_t scheduler_gnss_raw_retry_count,
-                            uint8_t terminal_sat_search_rate,
-                            int32_t asset_latitude,
-                            int32_t asset_longitude,
-                            uint16_t asset_interface_enabled,
-                            uint8_t asset_power_saving);
-    uint8_t receive_config_packet(uint8_t *scheduler_log_data_rate,
-                                  uint8_t *scheduler_gnss_pvt_retry_rate,
-                                  uint8_t *scheduler_gnss_raw_retry_rate,
-                                  uint8_t *scheduler_keep_alive_rate,
-                                  uint8_t *scheduler_gnss_pvt_retry_count,
-                                  uint8_t *scheduler_gnss_raw_retry_count,
-                                  uint8_t *terminal_sat_search_rate,
-                                  int32_t *asset_latitude,
-                                  int32_t *asset_longitude,
-                                  uint16_t *asset_interface_enabled,
-                                  uint8_t *asset_power_saving);
+    void send_config_packet(config_packet_t *config_packet);
+    uint8_t receive_config_packet(config_packet_t *config_packet);
 
-    void send_cmd_data_packet(uint8_t data[40],
-                              uint32_t createdDate);
-    // receive - TODO
+    void send_cmd_data_packet(cmd_data_packet_t *cmd_data_packet);
+    uint8_t receive_cmd_data_packet(cmd_data_packet_t *cmd_data_packet);
 
-    void send_terminal_status_packet(uint8_t msg_in_queue,
-                                     uint8_t ack_msg_in_queue,
-                                     uint8_t last_rst,
-                                     uint32_t uptime,
-                                     uint8_t last_mac_result,
-                                     uint8_t last_sat_search_peak_rssi,
-                                     uint32_t time_since_last_sat_search,
-                                     uint32_t sys_time,
-                                     uint8_t v_bat,
-                                     int8_t temp,
-                                     int32_t lat,
-                                     int32_t lon,
-                                     uint32_t loc_epoch);
-    // receive - TODO
+    void send_sat_status_packet(sat_status_packet_t *sat_status_packet);
+    uint8_t receive_sat_status_packet(sat_status_packet_t *sat_status_packet);
 
-    void send_clear_msg_data_packet();
-    // receive - TODO
+    void send_logger_status_packet(logger_status_packet_t *logger_status_packet);
+    uint8_t receive_logger_status_packet(logger_status_packet_t *logger_status_packet);
 
-    void send_update_loc_data_packet();
-    // receive - TODO
+    void send_gps_status_packet(gps_status_packet_t *gps_status_packet);
+    uint8_t receive_gps_status_packet(gps_status_packet_t *gps_status_packet);
+
+    void send_ble_status_packet(ble_status_packet_t *ble_status_packet);
+    uint8_t receive_ble_status_packet(ble_status_packet_t *ble_status_packet);
+
+    void send_asset_status_packet(asset_status_packet_t *asset_status_packet);
+    uint8_t receive_asset_status_packet(asset_status_packet_t *asset_status_packet);
+
+    void send_sat_bulletin_packet(sat_bulletin_packet_t *sat_bulletin_packet);
+    uint8_t receive_sat_bulletin_packet(sat_bulletin_packet_t *sat_bulletin_packet);
 
     void enableDebugging(Stream &debugPort,
                          bool printFullDebug);
