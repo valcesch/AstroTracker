@@ -1,5 +1,41 @@
 # AstroTracker
-Compact and lightweight tracker integrating the Astrocast communication module and u-blox CloudLocate service
+
+A tracker that can transmit your location anywhere on Earth ? Even when there is no terrestrial network such as 2G, 4G, 
+LoRa, etc. to relay your data ? A tracker that can acquire and transmit a location with only 10 joules of energy consumed 
+(Yes, this is nothing !) ? A tracker that measures only 55x55x10mm ? A tracker that weight only 44g (with battery !) ? 
+A tracker that can operate for at least 8 months when sending 1 location per day ? Sounds impossible ? Believe it or not, 
+but YES, this is possible and fortunately, you will find plenty of details in this page to build your own !
+
+The project is also on HACKADAY: https://hackaday.io/project/189798-astrotracker-mini 
+
+## Tracker "fact sheet"
+
+The main features of the tracker are listed below:
+
+- GNSS "snapshot" mode (u-blox MEAS20 messages for M10 receivers - data will be processed on CloudLocate service.
+- Single shared antenna for satellite communication AND GNSS acquisition.
+- Remotely configurable thanks to satellite downlink (user can set the tracker configuration such as acquisition rates).
+- Real-time scheduler (GNSS/sensors acquisition, generate status reports, etc.).
+
+Some key technical aspects are listed below:
+
+- Framework: Arduino core for SAMD21.
+- GNSS module: MAX-M10S from u-blox (L1 band: 1.575 GHz).
+- Communication module: Astronode S from Astrocast
+  - Downlink frequency: 1525-1559 MHz
+  - Uplink frequency: 1626.6-1660.5 MHz
+- RF switch:  GRF6011 from Guerrilla RF
+- PCB substrate: FR4, 4 layers
+- Connectors:
+  - 2 pin JST connector for wired battery.
+  - USB interface for programming.
+
+Some facts on latency and acquisition rates:
+
+- GPS acquisition rate: from 1 sample per day up to 1 sample per hour.
+- Message end-to-end latency: a few hours (depends on the location of the tracker).
+
+## Hardware versions
 
 ### AstroTracker V0.6 REV2
 
