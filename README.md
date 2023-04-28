@@ -64,7 +64,8 @@ List of message types that are stored in the logger of the tracker.
 
 ## Operator to Tracker - Command format
 
-The tracker can execute a certain amount of commands. Here is the description of the transport layer. 
+The tracker can execute a certain amount of commands trough the different available communication interfaces (Satellite, BLE, Mesh).
+Here is the description of the transport layer. 
 The protocol is inspired from the protocol used to communicate with the products from 
 [Advanced Navigation](https://www.advancednavigation.com/)
 
@@ -214,8 +215,24 @@ The list of supported packet IDs and their description is provided below:
     
     } config_packet_t;
 
-AstroTracker
-Copyright (C) 2023 valcesch
+The following table explains which commands are available for which communication interface:
+
+|Packet ID|Packet Name|Satellite|BLE|Mesh|
+|---|---|---|---|---|
+|0|Acknowledge packet|❌|✅|❌|
+|1|Request packet|❌|✅|❌|
+|2|Message data packet|✅|✅|❌|
+|3|Satellite status packet|❌|✅|❌|
+|4|Logger status packet|❌|✅|❌|
+|5|GPS status packet|❌|✅|❌|
+|6|BLE status packet|❌|✅|❌|
+|7|Asset status packet|❌|✅|❌|
+|11|Configuration packet|✅|✅|❌|
+
+
+## Copyright
+
+AstroTracker Copyright (C) 2023 valcesch
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
