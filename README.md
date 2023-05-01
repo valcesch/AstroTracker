@@ -95,19 +95,19 @@ Coming soon !
 
 ### AstroTracker V0.4 REV1
 
-Internal name: AstroPager
+Little name: AstroPager
 
 Coming soon !
 
 ### AstroTracker V0.5 REV3
 
-Internal name: AstroTrackerOne
+Little name: AstroTrackerOne
 
 Coming soon !
 
 ### AstroTracker V0.6 REV2
 
-Internal name: MiniTracker
+Little name: MiniTracker
 
 ![bottom](pictures/astrotracker_v06_rev2.JPG)
 
@@ -121,7 +121,7 @@ Internal name: MiniTracker
 
 ### AstroTracker V0.7 REV1
 
-Internal name: AstroTrackerMesh
+Little name: AstroTrackerMesh
 
 Coming soon !
 
