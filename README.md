@@ -89,7 +89,7 @@ used for all the versions by activating, deactivating the modules that needs to 
 
 ### AstroTracker V0.3 REV1
 
-Internal name: AstroAnimal
+Little name: AstroAnimal
 
 Coming soon !
 
