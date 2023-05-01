@@ -8,6 +8,53 @@ but YES, this is possible and fortunately, you will find plenty of details in th
 
 The project is also on HACKADAY: https://hackaday.io/project/189798-astrotracker-mini 
 
+## Principle of operation
+
+The principle of operation is relatively simple: the GPS data are collected thanks to an ultra-low power GNSS receiver 
+from u-blox and a satellite communication module from Astrocast is used to transmit the data to the cloud. 
+
+The GNSS receiver used on the tracker is a [MAX-M10S](https://www.u-blox.com/en/product/max-m10-series) from u-blox. 
+It outputs a raw sample of data that we can upload to a server of u-blox which will then return the 3D location of the 
+tracker.
+In good sky visibility, the receiver can start to output these raw messages in jst 3 seconds, which is much shorter 
+(and thus energy efficient), than going for a full PVT acquisition (up to 28 seconds for a cold start).
+
+The following schematic summarizes well the overall acquisition process:
+
+![bottom](pictures/ublox_cloudlocate_principle.png)
+
+Follow [this link](https://www.u-blox.com/en/product/cloudlocate) if you want to learn more on the "CloudLocate" 
+service from u-blox.
+
+So how do we transmit our raw sample of data to the server ? Well, it's now that we have to give some more details on 
+the satellite communication module from Astrocast: 
+the [Astronode S](https://docs.astrocast.com/docs/products/astronode-s/).
+
+The Astronode S is a low power bi-directional satellite communication module which uses the L-band frequency band to 
+communicate with the satellites. Once the raw GPS sample is acquired, the tracker will place it in the message queue of 
+the Astronode S and the module will automatically look for a satellite from the Astrocast constellation. 
+When a satellite is in view, the module will transmit the data that will then appear on the 
+[Astrocast portal](https://portal.astrocast.com/).
+
+The following schematic summarizes the overall data upload process:
+
+![bottom](pictures/astrocast_principle.png)
+
+Follow [this link](https://www.astrocast.com/) if you want to learn more on the service from Astrocast.
+
+In the schematics of the tracker, you will see that the Astronode S and GNSS receiver share the same 
+[patch antenna](https://www.astrocast.com/products/astronode-patch-antenna/) as they are working in the same frequency 
+range (1.5 - 1.6 GHz).  The RF switch that has been selected is a 
+[GRF6011](https://www.guerrilla-rf.com/products/detail/sku/GRF6011) from Guerrilla RF. 
+Its fail safe feature enables a good low power solution: when the RF switch is not powered, one of the two RF path will 
+present low insertion losses (<0.4 dB). When the switch is powered, the second RF path will instead go in a low 
+insertion loss state as illustrated below:
+
+![bottom](pictures/antenna_sharing.JPG)
+
+This solution allows to keep the GNSS RF path active when the RF switch is turned off. When the Astronode S wants to use 
+the antenna, its "ANTN_USE" pin of the module will power up the RF switch and connect the Astronode S to the antenna.
+
 ## Tracker "fact sheet"
 
 The main features of the tracker are listed below:
@@ -41,7 +88,7 @@ Some facts on latency and acquisition rates:
 
 Internal name: MiniTracker
 
-![bottom](pictures/astrotracker_v06_rev2.jpg)
+![bottom](pictures/astrotracker_v06_rev2.JPG)
 
 - U-blox MAX-M8/10 GNSS receiver, **shared antenna** with Astronode S communication module.
 - MCU is SAM2121G18A, integrated below the Astronode S module (Astronode S is mounted on a PCB spacer).
