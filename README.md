@@ -111,7 +111,7 @@ Little name: MiniTracker
 
 ![bottom](pictures/astrotracker_v06_rev2.JPG)
 
-- U-blox MAX-M8/10 GNSS receiver, **shared antenna** with Astronode S communication module.
+- U-blox MAX-M10s GNSS receiver, **shared antenna** with Astronode S communication module.
 - MCU is SAM2121G18A, integrated below the Astronode S module (Astronode S is mounted on a PCB spacer).
 - Astronode S + patch antenna communication module.
 - Hardware watchdog using [TPL5010](https://www.ti.com/product/TPL5010)
