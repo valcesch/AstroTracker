@@ -391,6 +391,12 @@ The configuration of the satellite modem should not be changed as it is tightly 
 |sat_search_rate|0=17.905s (default), 1=1.377s, 2=2.755s, 3=4.132s, 4=15.150s, 5=17.905s, 6=23.414s|Satellite detection period enumeration. In challenging environments without proper sky visibility, using a higher detection rate could improve the communication performances of the modem. Be careful as increasing the search rate will conduce to higher energy consumption.|
 |sat_force_search|1 = search without message queued<br/>0 = only search when a message is queued (default)|Enable search without message queued.|
 
+#### <code>gps_scheduler_settings</code> GPS scheduler configuration
+
+|Parameter|values (default)|Description|
+|---|---|---|
+|interval_h|custom (24h default)|GPS acquisition scheduler trigger interval (in hour).|
+
 ## Android app
 
 An Android app allows the user to execute the above listed commands on the tracker thanks to BLE capabilities of the 
