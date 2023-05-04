@@ -135,11 +135,11 @@ following table:
 
 List of message types that are stored in the logger of the tracker.
 
-|Message|ID|Length (Bytes)|Description|
+|Message Tag|ID|Length (Bytes)|Description|
 |---|---|---|---|
 |LOGGER_TAG_PVT_SLOT|0x01|20|Logger GNSS PVT message|
 |LOGGER_TAG_U_MSG_SLOT|0x02|41|Logger user message - Uplink message with text|
-|LOGGER_TAG_RAW_SLOT|0x04|21|Logger GNSS RAW message|
+|LOGGER_TAG_RAW_SLOT|0x04|21|Logger GNSS RAW message - CloudLocate input|
 
 #### <code>LOG_PVT_struct</code> Logger GNSS PVT message
 
@@ -341,6 +341,55 @@ The following table explains which commands are available for which communicatio
 |6|BLE status packet|❌|✅|❌|
 |7|Asset status packet|❌|✅|❌|
 |11|Configuration packet|✅|✅|❌|
+
+## Configuration
+
+The present chapter aims to provide some guidelines on how to set the configuration of the tracker. Note that for the 
+time being, the configuration is not saved in the flash memory of the device and any change done during the operation of the 
+tracker will be lost in case of reboot.
+
+Each module of the tracker has its own set of configuration parameters:
+
+#### <code>ble_settings</code> BLE radio configuration
+
+|Parameter|values (default)|Description|
+|---|---|---|
+|tx_power|nRF52840: -40, -20, -16, -12, -8, -4, 0 (default), +2, +3, +4, +5, +6, +7, +8.|BLE radio TX power level (in dBm)|
+|advert_fast_interval|custom (20 ms default)|Advertising interval that is used in the first n seconds (in unit of 0.625 seconds). Recommended values [here](https://developer.apple.com/library/content/qa/qa1931).|
+|advert_slow_interval|custom (1285 ms default)|Advertising interval that is used after fast timeout (in unit of 0.625 seconds). Recommended values [here](https://developer.apple.com/library/content/qa/qa1931).|
+|advert_fast_timeout|custom (30 s default)|Timeout of the fast advertising mode (in s)|
+
+#### <code>gps_settings</code> GPS/GNSS receiver configuration
+
+|Parameter|values (default)|Description|
+|---|---|---|
+|with_gps|True (default) / False|Enable/Disable GPS constellation tracking.|
+|with_galileo|True (default) / False|Enable/Disable Galileo constellation tracking.|
+|with_beidou|True (default) / False|Enable/Disable Beidou constellation tracking.|
+|with_glonass|True (default) / False|Enable/Disable GLONASS constellation tracking.|
+|with_rxm_meas20|True (default) / False|Enable/Disable acquisition of MEAS20 messages for u-blox CloudLocate.|
+|nav_freq_hz|custom (1 Hz default)|Rate at which the receiver will give us an updated navigation solution (in Hz)|
+|hacc_pvt_threshold|custom (10000 mm default)|Horizontal accuracy threshold. In PVT mode, the tracker will consider the solution as valid and creat a new log entry. (in mm).|
+|raw_timeout_s|custom (10 s default)|Receiver will try to do a RAW acquisition until the timeout has expired. It will then continue for a full PVT acquisition. (in s)|
+|pvt_timeout_s|custom (120 s default)|Receiver will try to do a full PVT acquisition until the timeout has expired. (in s)|
+
+#### <code>sat_settings</code> Satellite modem configuration
+
+The configuration of the satellite modem should not be changed as it is tightly linked wit operation of the tracker 
+(event based). Please do not change the configuration unless you know what you are doing !
+
+|Parameter|values (default)|Description|
+|---|---|---|
+|with_pld_ack|0 = Tracker not informed of ack to satellite <br/>1 = Tracker informed of ack to satellite (default)|DO NOT CHANGE - Satellite Acknowledgement.|
+|with_geo_loc|0 = No Geolocation bytes in uplink message (default) <br/>1 = Add Geolocation bytes in uplink message|NOT SUPPORTED - Add Geolocation to uplink message.|
+|with_ephemeris|0 = Disable Ephemeris (default)<br/>1 = Enable Ephemeris|Enable Ephemeris. Could be used to save some energy. Please carefully read [this](https://docs.astrocast.com/dl/0559-APN-M2M-ASTRO-Astronode_S_Low_Energy-Guidelines.pdf) in order to fully understand the limitations of this feature.|
+|with_deep_sleep_en|0 = Deep sleep not used (default)<br/>1 = Deep sleep is used|DO NOT CHANGE - Deep Sleep Mode.|
+|with_msg_ack_pin_en|0 = EVT pin does not show EVT register Satellite Payload Ack bit state <br/>11 = EVT pin shows EVT register Payload Ack bit state (default)|DO NOT CHANGE - Satellite Ack Event Pin Mask.|
+|with_msg_reset_pin_en|	0 = EVT pin does not show EVT register Reset Event Notification bit state (default)<br/>1 = EVT pin shows EVT register Reset Event Notification bit state|NOT SUPPORTED - Reset Notification Event Pin Mask.|
+|with_cmd_event_pin_en|0 = EVT pin does not show EVT register Command Available Notification bit state<br/>1 = EVT pin shows EVT register Command Available bit state (default)|DO NOT CHANGE - Command Available Event Pin Mask.|
+|with_tx_pend_event_pin_en|0 = EVT pin does not show EVT register Msg Tx Pending bit state (default)<br/>1 = EVT pin shows EVT register Msg Tx Pending bit state|NOT SUPPORTED - Message Transmission (Tx) Pending Event Pin Mask.|
+|sat_search_rate|0=17.905s (default), 1=1.377s, 2=2.755s, 3=4.132s, 4=15.150s, 5=17.905s, 6=23.414s|Satellite detection period enumeration. In challenging environments without proper sky visibility, using a higher detection rate could improve the communication performances of the modem. Be careful as increasing the search rate will conduce to higher energy consumption.|
+|sat_force_search|1 = search without message queued<br/>0 = only search when a message is queued (default)|Enable search without message queued.|
 
 ## Android app
 
